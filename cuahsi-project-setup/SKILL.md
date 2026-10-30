@@ -1,5 +1,5 @@
 ---
-name: setup-project-setup
+name: cuahsi-project-setup
 description: "Configure this repo for the engineering skills in accordance with CUAHSI project guidelines: set up its issue tracker, triage label vocabulary, and domain doc layout. Run once before first use of the other engineering skills."
 disable-model-invocation: true
 ---
