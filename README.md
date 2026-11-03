@@ -6,11 +6,12 @@ Agent skills for setting up CUAHSI software projects for AI-assisted engineering
 
 | Skill | Summary |
 | --- | --- |
-| [`cuahsi-project-setup`](cuahsi-project-setup/SKILL.md) | One-time setup of a repo for the engineering skills, following CUAHSI project guidelines. It runs `setup-matt-pocock-skills` with GitHub for code and PRs and Jira for issues, collects the project's Jira Objective ID and labels, and checks that `acli`, `gh`, and the Jira `netrc` credentials are configured. You must invoke it by name, since the agent won't trigger it automatically. |
+| [`cuahsi-project-setup`](cuahsi-project-setup/SKILL.md) | One-time setup of a repo for the engineering skills, following CUAHSI project guidelines: GitHub for code and PRs, Jira for issues. It first checks that `gh`, `acli`, the Jira `netrc` credentials, and `setup-matt-pocock-skills` are ready. It then collects the project's Jira Objective, project labels, and base branch, runs `setup-matt-pocock-skills` with Jira as the issue tracker, and adds a PR template that links each PR to its Story. You must invoke it by name, since the agent won't trigger it automatically. |
 
 ### Supporting assets
 
-- [`cuahsi-project-setup/assets/issue-tracking-guidelines.md`](cuahsi-project-setup/assets/issue-tracking-guidelines.md) is the Jira playbook that agents follow. It covers the work-item hierarchy (Research Project → Objective → Epic → Story → Sub-task), `acli` commands, Jira REST calls for sprints and dates, branch and PR naming (`<KEY>-<short-description>`), and wayfinding operations.
+- [`cuahsi-project-setup/assets/issue-tracking-guidelines.md`](cuahsi-project-setup/assets/issue-tracking-guidelines.md) is the template for the Jira playbook that agents follow. Setup fills in its `{{...}}` placeholders (Objective, project labels, base branch, GitHub repo) and writes the result to `docs/agents/issue-tracker.md`. It covers the work-item hierarchy (Research Project → Objective → Epic → Story → Sub-task), `acli` commands, Jira REST calls for sprints and dates, branch, commit, and PR conventions, and wayfinding operations.
+- [`cuahsi-project-setup/assets/pull_request_template.md`](cuahsi-project-setup/assets/pull_request_template.md) is copied to `.github/pull_request_template.md`. It asks for the Jira Story link, a summary, testing notes, and a short checklist.
 
 ## Prerequisites
 
@@ -159,10 +160,15 @@ npx skills remove <name> # uninstall
 
 1. Install the prerequisites and skills above.
 2. Open the repository you want to set up in your agent and invoke the setup skill by name, for example `/cuahsi-project-setup` in Claude Code.
-3. When asked, give the Jira **Objective ID** for the project (for example `CAM-209`) and confirm the labels to apply to work items.
-4. The skill writes configuration to `docs/agents/*.md`. You can edit those files directly later. Re-run the skill only to switch issue trackers or start over.
+3. When asked, give the Jira **Objective ID** for the project (for example `CAM-209`), then confirm the project labels and the base branch (`develop` if it exists, otherwise the default branch).
+4. The skill writes configuration to `docs/agents/*.md` and adds `.github/pull_request_template.md`. You can edit those files directly later. Re-running the skill shows a diff before changing anything; you only need it to switch issue trackers or start over.
 
-Once setup is done, the engineering skills follow CUAHSI conventions. Stories are created under the project's Objective in Jira. Branches are named `<KEY>-<short-description>`. PR titles include the Jira key (for example `CAM-1500: Add HydroShare metadata collector`), and opening a PR moves the Story to `In Review`.
+Once setup is done, the engineering skills follow CUAHSI conventions:
+
+- Stories and Epics are created under the project's Objective in Jira, with the project labels.
+- Branches are named `<KEY>-<short-description>` and start from the base branch.
+- Commit messages and PR titles start with the Jira key (for example `CAM-1500: Add HydroShare metadata collector`).
+- Opening a PR adds the PR link to the Story as a comment and moves it to `In Review`. Merging moves it to `Done`.
 
 ## Repository layout
 
@@ -170,7 +176,10 @@ Once setup is done, the engineering skills follow CUAHSI conventions. Stories ar
 .
 ├── cuahsi-project-setup/
 │   ├── SKILL.md
-│   └── assets/issue-tracking-guidelines.md
+│   └── assets/
+│       ├── issue-tracking-guidelines.md
+│       └── pull_request_template.md
+├── .gitignore
 └── README.md
 ```
 

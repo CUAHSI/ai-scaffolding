@@ -2,46 +2,57 @@
 
 Tickets and specs live in Jira, project `CAM`, on `cuahsi.atlassian.net`. Use the Atlassian CLI (`acli`) for all operations. GitHub is used **only for source code and pull requests**; never create GitHub issues.
 
-`CAM` is shared by every Compute and Modeling team project, and the tree for this work is defined by the Objective obtained from the user. Only touch work items under the associated Objective, plus new items you create under the rules below.
+`CAM` is shared by every Compute and Modeling team project, and the tree for this repo's work is defined by the Objective `{{OBJECTIVE_KEY}}`. Only touch work items under that Objective, plus new items you create under the rules below.
 
 Prefix every `acli` command with `PAGER=cat` (or `export PAGER=cat`), otherwise output opens in an interactive pager and hangs. In a chain like `a; b`, the prefix applies only to `a`: use `export PAGER=cat;` first. `acli jira workitem view` ignores `PAGER` and still opens a pager; pipe it through `| cat` instead (e.g. `acli jira workitem view <KEY> --json | cat`).
+
+## Project
+
+| Item | Value |
+| --- | --- |
+| Objective | `{{OBJECTIVE_KEY}}` |
+| Project labels | `{{LABELS}}` |
+| Base branch | `{{BASE_BRANCH}}` |
+| GitHub repo | `{{GITHUB_REPO}}` |
+
+**Project labels** mark work items as belonging to this repo. Apply all of them to every work item you create. They are separate from the triage labels in `docs/agents/triage-labels.md`, which track an item's triage state. Both kinds are Jira labels and are created on first use.
 
 ## Hierarchy
 
 Project hierarchy follows this format:
 
 ```text
-CAM-1021  Research Project   A specific research project 
-└── CAM-209  Objective       The objective that the work will contribute to. 
+CAM-1021  Research Project   A specific research project
+└── {{OBJECTIVE_KEY}}  Objective   The objective that the work will contribute to
     └── Epic                 bundles related Stories; 1 week to 3 months of work
         └── Story            smallest unit agents create
             └── Sub-task     (created by humans; agents don't create these)
 ```
 
-List the current set with `acli jira workitem search --jql "parent = CAM-209 AND statusCategory != Done ORDER BY cf[10116] ASC" --fields "key,issuetype,summary,status" --csv`.
+List the current set with `acli jira workitem search --jql "parent = {{OBJECTIVE_KEY}} AND statusCategory != Done ORDER BY cf[10116] ASC" --fields "key,issuetype,summary,status" --csv`.
 
 - **Story** is the smallest unit to create. Every Story has an Epic as its parent.
-- Create an **Epic** only when bundling several related Stories that together take 1 week to 3 months.
+- Create an **Epic** only when bundling several related Stories that together take 1 week to 3 months. Every Epic has `{{OBJECTIVE_KEY}}` as its parent.
 - Never create Research Projects, Objectives, or Sub-tasks.
-- Every work item gets the labels. These labels can be inferred from existing labels in the Objective or from the user.
+- Every work item gets the project labels `{{LABELS}}`.
 - Order backlogs by Rank: `ORDER BY cf[10116] ASC` (`customfield_10116`).
 - Statuses: `To Do`, `Up Next`, `In Progress`, `In Review`, `Done`, `Won't Do`.
 
 ## Conventions
 
-- **Create a Story**: `acli jira workitem create --project CAM --type Story --parent <EPIC-KEY> --label COMSES,OMF-Skills --summary "..." --description-file <file>`. Write the body to a temp file for multi-line descriptions. Plain text only: Jira does not render Markdown (use ADF JSON if rich formatting matters).
+- **Create a Story**: `acli jira workitem create --project CAM --type Story --parent <EPIC-KEY> --label "{{LABELS}}" --summary "..." --description-file <file>`. Write the body to a temp file for multi-line descriptions. Plain text only: Jira does not render Markdown (use ADF JSON if rich formatting matters).
 
-- **Create an Epic**: same as above with `--type Epic --parent <EPIC-KEY>`.
+- **Create an Epic**: same as above with `--type Epic --parent {{OBJECTIVE_KEY}}`.
 
 - **Read a work item**: `acli jira workitem view <KEY> --fields "summary,issuetype,status,parent,labels,description,comment" --json`.
 
 - **Read comments**: `acli jira workitem comment list --key <KEY>`.
 
-- **List this repo's work**: `acli jira workitem search --jql "project = CAM AND labels = <LABELS> AND statusCategory != Done ORDER BY cf[10116] ASC" --fields "key,issuetype,summary,status,labels" --csv`. Narrow with `AND parent = <EPIC-KEY>`, `AND labels = ready-for-agent`, `AND issuetype = Story`, etc.
+- **List this repo's work**: `acli jira workitem search --jql "project = CAM AND {{LABEL_FILTER}} AND statusCategory != Done ORDER BY cf[10116] ASC" --fields "key,issuetype,summary,status,labels" --csv`. Narrow with `AND parent = <EPIC-KEY>`, `AND labels = ready-for-agent`, `AND issuetype = Story`, etc.
 
 - **Comment**: `acli jira workitem comment create --key <KEY> --body "..."` (or `--body-file <file>`).
 
-- **Apply / remove labels**: `acli jira workitem edit --key <KEY> --labels "..." --yes` / `--remove-labels "..." --yes`. Labels are created on first use.
+- **Apply / remove labels**: `acli jira workitem edit --key <KEY> --labels "..." --yes` / `--remove-labels "..." --yes`. Labels are created on first use, so there is no separate create step.
 
 - **Change status**: `acli jira workitem transition --key <KEY> --status "In Progress" --yes`.
 
@@ -75,21 +86,21 @@ One-time setup, done by the user:
 1. Create a classic API token at <https://id.atlassian.com/manage-profile/security/api-tokens> with **Create API token**, not **Create API token with scopes** (scoped tokens need a different base URL and separate sprint permissions).
 2. Create a private folder and an empty file only the user can read:
 
-   ```sh  
-   mkdir -p ~/.jira && chmod 700 ~/.jira  
-   touch ~/.jira/netrc && chmod 600 ~/.jira/netrc  
-   open -e ~/.jira/netrc  
-   ```  
+   ```sh
+   mkdir -p ~/.jira && chmod 700 ~/.jira
+   touch ~/.jira/netrc && chmod 600 ~/.jira/netrc
+   open -e ~/.jira/netrc
+   ```
 
    Use an editor (`open -e`, `nano`, `vim`), not `echo`, so the token stays out of shell history.
 
-3. Add one line, replacing the email and token:
+3. Add the following, replacing the email and token:
 
    ```text
-   machine cuahsi.atlassian.net  
-     login <atlassian-email>  
-     password <api-token>  
-   ```  
+   machine cuahsi.atlassian.net
+     login <atlassian-email>
+     password <api-token>
+   ```
 
    `machine` is the bare host (no `https://`, no trailing `/`), `login` is the Atlassian sign-in email, and `password` is the token exactly as issued, with no quotes. End the file with a newline.
 
@@ -114,21 +125,30 @@ Before the first REST call, check the file without reading it:
 
 ## Branches
 
-Work on a Story in its own branch, ideally off a `develop` branch, however branching off `main` is also acceptable: named `<KEY>-<short-description>`: the Jira key, then a few lowercase, hyphenated words summarising the change (e.g. `CAM-1500-hydroshare-codemeta-collector`). The key ties the branch, and the PR opened from it, back to the Story.
+Work on a Story in its own branch off the latest `{{BASE_BRANCH}}`, named `<KEY>-<short-description>`: the Jira key, then a few lowercase, hyphenated words summarising the change (e.g. `CAM-1500-hydroshare-codemeta-collector`). The key ties the branch, and the PR opened from it, back to the Story.
 
 ```sh
-git checkout develop && git pull && git checkout -b CAM-1500-hydroshare-codemeta-collector
+git checkout {{BASE_BRANCH}} && git pull && git checkout -b CAM-1500-hydroshare-codemeta-collector
 ```
+
+## Commits
+
+Start every commit message with the Story key and a colon (e.g. `CAM-1500: Parse HydroShare resource metadata`), so each commit traces back to its Story.
 
 ## Pull requests (GitHub)
 
-PRs are opened on GitHub with `gh pr create --base main` or `gh pr create --base develop`, from a branch named as in **Branches** above. Put the Jira key in the PR title (e.g. `CAM-1500: Add maintained HydroShare metadata collector`) so the PR can be traced back to its Story. When a PR is opened for a Story, transition the Story to `In Review`.
+The Story moves through these steps alongside its PR:
+
+1. **Open**: `gh pr create --base {{BASE_BRANCH}}` from a branch named as in **Branches** above. Put the Jira key in the PR title (e.g. `CAM-1500: Add maintained HydroShare metadata collector`) and fill in the repo's PR template, including the Jira link `https://cuahsi.atlassian.net/browse/<KEY>`.
+2. **Link back**: comment the PR URL on the Story (`acli jira workitem comment create --key <KEY> --body "PR: <url>"`), then transition the Story to `In Review`.
+3. **Merged**: when `gh pr view <n> --json state` reports `MERGED`, transition the Story to `Done`. Whenever you come across a Story in `In Review`, check its PR this way and transition it if it has merged.
+4. **Closed without merging**: comment the reason on the Story and move it back to `In Progress`, or to `Won't Do` if the work is abandoned.
 
 **PRs as a request surface: no.** _(Set to `yes` if this repo treats external PRs as feature requests; `/triage` reads this flag.)_ When `yes`, triage external PRs with `gh pr view <n> --comments`, `gh pr diff <n>`, `gh pr comment`, `gh pr edit --add-label`/`--remove-label`, and `gh pr close`.
 
 ## When a skill says "publish to the issue tracker"
 
-Create a Jira Story under the relevant Epic, use labels previously aquired from the user. If no Epic clearly fits, ask the user which one to use rather than guessing.
+Create a Jira Story under the relevant Epic of `{{OBJECTIVE_KEY}}`, labelled `{{LABELS}}` (or an Epic under `{{OBJECTIVE_KEY}}`, if it's a multi-Story body of work). If no Epic clearly fits, ask the user which one to use rather than guessing.
 
 ## When a skill says "fetch the relevant ticket"
 
@@ -138,9 +158,9 @@ Read it as in **Read a work item** above. A bare `#42` refers to a GitHub PR (or
 
 Used by `/wayfinder`. The **map** is a single Epic with **child** Stories as tickets.
 
-- **Map**: an Epic under `CAM-209`, labelled `COMSES,OMF-Skills,wayfinder:map`, holding the Notes / Decisions-so-far / Fog body.
+- **Map**: an Epic under `{{OBJECTIVE_KEY}}`, labelled `{{LABELS}},wayfinder:map`, holding the Notes / Decisions-so-far / Fog body.
 
-- **Child ticket**: a Story with `--parent <map-epic>`, labelled `COMSES,OMF-Skills,wayfinder:<type>` (`research`/`prototype`/`grilling`/`task`). Once claimed, it's assigned to the driving dev.
+- **Child ticket**: a Story with `--parent <map-epic>`, labelled `{{LABELS}},wayfinder:<type>` (`research`/`prototype`/`grilling`/`task`). Once claimed, it's assigned to the driving dev.
 
 - **Blocking**: a `Blocks` link, created as in **Link** above. A ticket is unblocked when every item it is blocked by (each `inwardIssue` on its `Blocks` links) is in `Done` or `Won't Do`.
 
