@@ -1,0 +1,179 @@
+# CUAHSI AI Scaffolding
+
+Agent skills for setting up CUAHSI software projects for AI-assisted engineering. The skills work with any agent that supports the [Agent Skills](https://skills.sh/) format, such as Claude Code, Zed, Cursor, and Codex. They set up CUAHSI's standard workflow: code and pull requests live on GitHub, and issues are tracked in Jira (project `CAM` on `cuahsi.atlassian.net`).
+
+## Skills
+
+| Skill | Summary |
+| --- | --- |
+| [`cuahsi-project-setup`](cuahsi-project-setup/SKILL.md) | One-time setup of a repo for the engineering skills, following CUAHSI project guidelines. It runs `setup-matt-pocock-skills` with GitHub for code and PRs and Jira for issues, collects the project's Jira Objective ID and labels, and checks that `acli`, `gh`, and the Jira `netrc` credentials are configured. You must invoke it by name, since the agent won't trigger it automatically. |
+
+### Supporting assets
+
+- [`cuahsi-project-setup/assets/issue-tracking-guidelines.md`](cuahsi-project-setup/assets/issue-tracking-guidelines.md) is the Jira playbook that agents follow. It covers the work-item hierarchy (Research Project → Objective → Epic → Story → Sub-task), `acli` commands, Jira REST calls for sprints and dates, branch and PR naming (`<KEY>-<short-description>`), and wayfinding operations.
+
+## Prerequisites
+
+Install and configure the following before running `cuahsi-project-setup`.
+
+| Tool | Used for |
+| --- | --- |
+| [Node.js](https://nodejs.org/) (includes `npx`) | Installing skills with the [`skills`](https://skills.sh/) CLI |
+| [Git](https://git-scm.com/) | Source control |
+| [GitHub CLI (`gh`)](https://cli.github.com/) | Branches and pull requests |
+| [Atlassian CLI (`acli`)](https://developer.atlassian.com/cloud/acli/) | Creating, reading, and updating Jira work items |
+| `curl` + `~/.jira/netrc` | Jira REST calls that `acli` can't make (sprints, start dates, due dates, links) |
+| [`mattpocock/skills`](https://github.com/mattpocock/skills) | Provides `setup-matt-pocock-skills` and the engineering skills that `cuahsi-project-setup` configures |
+
+### 1. Node.js and Git
+
+macOS (with [Homebrew](https://brew.sh/)):
+
+```sh
+brew install node git
+```
+
+Linux and Windows: install Node.js LTS from <https://nodejs.org/> and Git from <https://git-scm.com/downloads>.
+
+Verify:
+
+```sh
+node --version && npx --version && git --version
+```
+
+### 2. GitHub CLI (`gh`)
+
+```sh
+# macOS
+brew install gh
+
+# Windows
+winget install --id GitHub.cli
+```
+
+On Linux, follow the [official install instructions](https://github.com/cli/cli/blob/trunk/docs/install_linux.md). Then sign in:
+
+```sh
+gh auth login
+gh auth status
+```
+
+### 3. Atlassian CLI (`acli`)
+
+```sh
+# macOS
+brew tap atlassian/homebrew-acli
+brew install acli
+acli --version
+```
+
+On Linux and Windows, follow Atlassian's [install guides](https://developer.atlassian.com/cloud/acli/guides/install-acli/). Atlassian supports each `acli` version for only 6 months, so keep it up to date.
+
+Sign in to the CUAHSI Jira site. The browser option is simplest:
+
+```sh
+acli jira auth login --web
+```
+
+Or sign in with an API token (see step 4) read from a file, so the token stays out of your shell history:
+
+```sh
+acli jira auth login --site "cuahsi.atlassian.net" --email "<you>@cuahsi.org" --token < token.txt
+```
+
+Check that it worked with `acli jira auth status`.
+
+> Tip: `acli` output opens in a pager. Run `export PAGER=cat` in non-interactive shells and agent sessions.
+
+### 4. Jira REST credentials (`~/.jira/netrc`)
+
+Some Jira operations need the REST API, which reads credentials from a private netrc file. Agents are told never to read or print this file.
+
+1. Create a **classic** API token at <https://id.atlassian.com/manage-profile/security/api-tokens>. Choose **Create API token**, not **Create API token with scopes**.
+2. Create the file with permissions that only you can read:
+
+   ```sh
+   mkdir -p ~/.jira && chmod 700 ~/.jira
+   touch ~/.jira/netrc && chmod 600 ~/.jira/netrc
+   open -e ~/.jira/netrc   # or: nano ~/.jira/netrc
+   ```
+
+3. Add the following, using your Atlassian email and token, and end the file with a newline:
+
+   ```text
+   machine cuahsi.atlassian.net
+     login <atlassian-email>
+     password <api-token>
+   ```
+
+4. Verify (read-only):
+
+   ```sh
+   ls -l ~/.jira/netrc   # must start with -rw-------
+   curl -sS --netrc-file ~/.jira/netrc https://cuahsi.atlassian.net/rest/api/3/myself
+   ```
+
+   A JSON response with your `displayName` means it worked. HTTP 401 means the email, token, or `machine` host is wrong.
+
+## Installing the skills
+
+All skills are installed with the [`skills`](https://skills.sh/) CLI through `npx`, so you don't need a global install. By default, skills are installed in the current project. Add `-g` to install them for your user account across all projects, and `-a <agent>` to target a specific agent (for example `-a claude-code`).
+
+### Install all skills from this repo
+
+```sh
+# See what's available
+npx skills add CUAHSI/ai-scaffolding --list
+
+# Install every skill for every detected agent, without prompts
+npx skills add CUAHSI/ai-scaffolding --all
+
+# Or install globally
+npx skills add CUAHSI/ai-scaffolding --skill '*' -g
+```
+
+### Install the required `mattpocock/skills` dependency
+
+`cuahsi-project-setup` runs `setup-matt-pocock-skills`, which comes from Matt Pocock's skill collection:
+
+```sh
+npx skills add mattpocock/skills
+```
+
+### Install individual skills
+
+```sh
+npx skills add CUAHSI/ai-scaffolding --skill cuahsi-project-setup
+```
+
+
+### Manage installed skills
+
+```sh
+npx skills list          # project skills (add -g for global)
+npx skills update        # update to latest versions
+npx skills remove <name> # uninstall
+```
+
+## Usage
+
+1. Install the prerequisites and skills above.
+2. Open the repository you want to set up in your agent and invoke the setup skill by name, for example `/cuahsi-project-setup` in Claude Code.
+3. When asked, give the Jira **Objective ID** for the project (for example `CAM-209`) and confirm the labels to apply to work items.
+4. The skill writes configuration to `docs/agents/*.md`. You can edit those files directly later. Re-run the skill only to switch issue trackers or start over.
+
+Once setup is done, the engineering skills follow CUAHSI conventions. Stories are created under the project's Objective in Jira. Branches are named `<KEY>-<short-description>`. PR titles include the Jira key (for example `CAM-1500: Add HydroShare metadata collector`), and opening a PR moves the Story to `In Review`.
+
+## Repository layout
+
+```text
+.
+├── cuahsi-project-setup/
+│   ├── SKILL.md
+│   └── assets/issue-tracking-guidelines.md
+└── README.md
+```
+
+## Contributing
+
+To add a skill, create a folder with a `SKILL.md` that has `name` and `description` front matter (`npx skills init <name>` creates one). Then check that the skill is found with `npx skills add . --list`.
