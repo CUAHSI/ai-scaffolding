@@ -10,6 +10,8 @@ disable-model-invocation: true
 
 * You will need to gather the JIRA Objective ID assocated with this project. Use `./assets/issue-tracking-guidelines.md` to configure the issue tracking for this project. Issues will contain labels, which should be inferred from existing child items of the Objective and by asking the user.
 
+* Objective labels should be stored in the triage labels file and referenced as necessary.
+
 * Verify that the user has `acli`, `gh`, and `netrc` configured properly. If not, provide instructions for setting these up based on thier operating system. 
 
 ### 2. Done

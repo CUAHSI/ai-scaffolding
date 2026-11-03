@@ -114,21 +114,21 @@ Before the first REST call, check the file without reading it:
 
 ## Branches
 
-Work on a Story in its own branch off the latest `main` (this repo has no `develop` branch), named `<KEY>-<short-description>`: the Jira key, then a few lowercase, hyphenated words summarising the change (e.g. `CAM-1500-hydroshare-codemeta-collector`). The key ties the branch, and the PR opened from it, back to the Story.
+Work on a Story in its own branch, ideally off a `develop` branch, however branching off `main` is also acceptable: named `<KEY>-<short-description>`: the Jira key, then a few lowercase, hyphenated words summarising the change (e.g. `CAM-1500-hydroshare-codemeta-collector`). The key ties the branch, and the PR opened from it, back to the Story.
 
 ```sh
-git checkout main && git pull && git checkout -b CAM-1500-hydroshare-codemeta-collector
+git checkout develop && git pull && git checkout -b CAM-1500-hydroshare-codemeta-collector
 ```
 
 ## Pull requests (GitHub)
 
-PRs are opened on GitHub with `gh pr create --base main`, from a branch named as in **Branches** above. Put the Jira key in the PR title (e.g. `CAM-1500: Add maintained HydroShare metadata collector`) so the PR can be traced back to its Story. When a PR is opened for a Story, transition the Story to `In Review`.
+PRs are opened on GitHub with `gh pr create --base main` or `gh pr create --base develop`, from a branch named as in **Branches** above. Put the Jira key in the PR title (e.g. `CAM-1500: Add maintained HydroShare metadata collector`) so the PR can be traced back to its Story. When a PR is opened for a Story, transition the Story to `In Review`.
 
 **PRs as a request surface: no.** _(Set to `yes` if this repo treats external PRs as feature requests; `/triage` reads this flag.)_ When `yes`, triage external PRs with `gh pr view <n> --comments`, `gh pr diff <n>`, `gh pr comment`, `gh pr edit --add-label`/`--remove-label`, and `gh pr close`.
 
 ## When a skill says "publish to the issue tracker"
 
-Create a Jira Story under the relevant `CAM-209` Epic (or an Epic under `CAM-209`, if it's a multi-Story body of work), labelled `COMSES,OMF-Skills`. If no Epic clearly fits, ask the user which one to use rather than guessing.
+Create a Jira Story under the relevant Epic, use labels previously aquired from the user. If no Epic clearly fits, ask the user which one to use rather than guessing.
 
 ## When a skill says "fetch the relevant ticket"
 
