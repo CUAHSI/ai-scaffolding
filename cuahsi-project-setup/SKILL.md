@@ -31,14 +31,16 @@ Run each check. Done when every one passes.
 | Atlassian CLI signed in | `acli jira auth status` | Authenticated to `cuahsi.atlassian.net` |
 | Jira netrc permissions | `ls -l ~/.jira/netrc` | Starts with `-rw-------` |
 | Jira REST login | `curl -sS -o /dev/null -w "%{http_code}\n" --netrc-file ~/.jira/netrc https://cuahsi.atlassian.net/rest/api/3/myself` | `200` |
-| Parent skill installed | `setup-matt-pocock-skills` is in your available skills | Present |
+| Parent skill | Locate `setup-matt-pocock-skills` in the available skills or an installed skill directory (see below) | Available or its `SKILL.md` is readable |
+
+For the parent skill, check the project and user skill directories, including `.agents/skills/setup-matt-pocock-skills/SKILL.md` and `~/.agents/skills/setup-matt-pocock-skills/SKILL.md`, and the active agent's skill directories (for example, `.claude/skills/` or `~/.claude/skills/`). Prefer the project installation when both exist. A skill can be installed but absent from the invocable-skills list, for example when it is user-invoked only; a readable `SKILL.md` satisfies this check.
 
 For each failure, give the user setup steps for their operating system and wait for them to fix it:
 
 - `gh`: install from <https://cli.github.com/>, then `gh auth login`.
 - `acli`: install from <https://developer.atlassian.com/cloud/acli/guides/install-acli/>, then `acli jira auth login --web`.
 - netrc: walk them through **Credentials** in the guidelines template. The netrc file holds an API token; check it only with the two commands above, and keep its contents out of the conversation.
-- Parent skill: `npx skills add mattpocock/skills`, then restart the agent session so the skill loads.
+- Parent skill: if it is installed but its location or contents cannot be accessed, ask the user to provide the path or attach the skill. If it is not installed, ask the user to install it with `npx skills add mattpocock/skills`, then recheck.
 
 ## 2. Gather project values
 
@@ -51,7 +53,7 @@ Done when the user has confirmed a value for every placeholder in the table abov
 
 ## 3. Run `setup-matt-pocock-skills`
 
-Invoke `setup-matt-pocock-skills` and answer its sections as follows:
+Use `setup-matt-pocock-skills` if it is provided in context or available through the skill tool. Otherwise, read the installed `SKILL.md` located in step 1 and follow its process directly; resolve its relative references from that skill's directory. Apply these CUAHSI-specific answers:
 
 - **Section A (issue tracker):** choose **Other**. For `docs/agents/issue-tracker.md`, use the guidelines template with every `{{...}}` placeholder replaced by the values from step 2 (in place of a freeform description).
 - **Section B (triage labels):** keep the defaults unless the user says otherwise. Triage labels are Jira labels, created on first use, so skip `gh label create`. `docs/agents/triage-labels.md` holds only the triage roles; the project labels live in the **Project** table of `docs/agents/issue-tracker.md`.
