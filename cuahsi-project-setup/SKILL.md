@@ -18,7 +18,7 @@ Configure this repo so the engineering skills track work in Jira (project `CAM`)
 
 `<...>` placeholders in the template (`<KEY>`, `<EPIC-KEY>`, ...) are filled in per command at run time; leave them as written.
 
-If `docs/agents/issue-tracker.md` already exists, this is a re-run: read its **Project** table and offer those values as the defaults in step 2.
+If `docs/agents/issue-tracker.md` already exists, this is a re-run, including when updating the playbook to the latest template: read its **Project** table and offer those values as the defaults in step 2.
 
 ## 1. Check prerequisites
 
@@ -75,4 +75,4 @@ Tell the user setup is complete and list:
 - Every file created or changed.
 - The engineering skills that now read from `docs/agents/`.
 
-Mention that they can edit `docs/agents/*.md` directly later; re-running this skill is only needed to switch issue trackers or start over.
+Mention that they can edit `docs/agents/*.md` directly later or re-run this skill to update the playbook from the latest template, switch issue trackers, or start over.
