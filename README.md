@@ -135,7 +135,7 @@ npx skills add CUAHSI/ai-scaffolding --skill '*' -g
 
 ### Install the required `mattpocock/skills` dependency
 
-`cuahsi-project-setup` runs `setup-matt-pocock-skills`, which comes from Matt Pocock's skill collection:
+`cuahsi-project-setup` follows `setup-matt-pocock-skills`, which comes from Matt Pocock's skill collection. It can read the installed skill directly if it is not available for automatic invocation:
 
 ```sh
 npx skills add mattpocock/skills
