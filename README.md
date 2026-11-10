@@ -161,14 +161,17 @@ npx skills remove <name> # uninstall
 1. Install the prerequisites and skills above.
 2. Open the repository you want to set up in your agent and invoke the setup skill by name, for example `/cuahsi-project-setup` in Claude Code.
 3. When asked, give the Jira **Objective ID** for the project (for example `CAM-209`), then confirm the project labels and the base branch (`develop` if it exists, otherwise the default branch).
-4. The skill writes configuration to `docs/agents/*.md` and adds `.github/pull_request_template.md`. You can edit those files directly later. Re-running the skill shows a diff before changing anything; you only need it to switch issue trackers or start over.
+4. The skill writes configuration to `docs/agents/*.md` and adds `.github/pull_request_template.md`. You can edit those files directly later or re-run the skill to update the playbook from the latest template. Re-running shows a diff before changing anything.
 
 Once setup is done, the engineering skills follow CUAHSI conventions:
 
 - Stories and Epics are created under the project's Objective in Jira, with the project labels.
 - Branches are named `<KEY>-<short-description>` and start from the base branch.
 - Commit messages and PR titles start with the Jira key (for example `CAM-1500: Add HydroShare metadata collector`).
-- Opening a PR adds the PR link to the Story as a comment and moves it to `In Review`. Merging moves it to `Done`.
+- Asking to `/implement` a Jira ticket assigns it to the requester, adds the Story to the active sprint, and moves it to `In Progress`.
+- Asking to open a GitHub PR uses the repo's PR template, comments the PR link on the Story, and moves it to `In Review`.
+- Reporting that a PR was reviewed or merged moves the Story to `Done` and adds a Jira comment, shown in chat. A review alone triggers this even if the PR has not been merged.
+- These workflow actions need no separate approval; missing or ambiguous information and failed actions are reported.
 
 ## Repository layout
 

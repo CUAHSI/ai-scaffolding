@@ -123,6 +123,14 @@ Before the first REST call, check the file without reading it:
 - **Verify** every write by reading it back with `acli jira workitem view <KEY> --fields "customfield_10504,duedate,customfield_10115" --json | cat`.
 - When setting due dates for dependent Stories, keep them consistent with `Blocks` links: a blocker's due date comes on or before the start date of every item it blocks.
 
+## Implementation requests
+
+When the user asks to `/implement` a Jira ticket, these Jira writes are part of the request and need no separate approval:
+
+1. Identify the ticket and confirm it belongs under `{{OBJECTIVE_KEY}}`. Assign it to the requester with `acli jira workitem assign --key <KEY> --assignee <ACCOUNT-ID-OR-EMAIL> --yes`. Use `@me` only when the authenticated `acli` account is the requester; if the requester's Jira identity is unclear, ask for it rather than assigning a different account.
+2. List active sprints on the CAM board as in **Sprints, start dates, and due dates** and add the Story to the active sprint using the REST request there. If there are multiple active sprints and the correct one is unclear, ask which to use. If there is no active sprint or the ticket is not a Story, report that the sprint assignment is blocked; only Stories are added to sprints.
+3. Transition the ticket to `In Progress` as in **Change status**. Verify the changes with `acli jira workitem view <KEY> --fields "assignee,status,customfield_10115" --json | cat`. Skip writes already satisfied, and report any failed or blocked action rather than claiming it succeeded.
+
 ## Branches
 
 Work on a Story in its own branch off the latest `{{BASE_BRANCH}}`, named `<KEY>-<short-description>`: the Jira key, then a few lowercase, hyphenated words summarising the change (e.g. `CAM-1500-hydroshare-codemeta-collector`). The key ties the branch, and the PR opened from it, back to the Story.
@@ -137,12 +145,13 @@ Start every commit message with the Story key and a colon (e.g. `CAM-1500: Parse
 
 ## Pull requests (GitHub)
 
-The Story moves through these steps alongside its PR:
+When the user asks to open a PR or says a PR has been reviewed and/or merged, the corresponding GitHub and Jira writes below are part of the request and need no separate approval. Identify the associated Story from the request, branch, PR, or Jira link; if it is ambiguous, ask which Story to use. Confirm it belongs under `{{OBJECTIVE_KEY}}` before modifying it.
 
-1. **Open**: `gh pr create --base {{BASE_BRANCH}}` from a branch named as in **Branches** above. Put the Jira key in the PR title (e.g. `CAM-1500: Add maintained HydroShare metadata collector`) and fill in the repo's PR template, including the Jira link `https://cuahsi.atlassian.net/browse/<KEY>`.
-2. **Link back**: comment the PR URL on the Story (`acli jira workitem comment create --key <KEY> --body "PR: <url>"`), then transition the Story to `In Review`.
-3. **Merged**: when `gh pr view <n> --json state` reports `MERGED`, transition the Story to `Done`. Whenever you come across a Story in `In Review`, check its PR this way and transition it if it has merged.
-4. **Closed without merging**: comment the reason on the Story and move it back to `In Progress`, or to `Won't Do` if the work is abandoned.
+1. **Open**: create a GitHub PR targeting `{{BASE_BRANCH}}` from a branch named as in **Branches** above. Put the Jira key in the title (e.g. `CAM-1500: Add maintained HydroShare metadata collector`). Fill in the repo's `.github/pull_request_template.md`, including the Jira link `https://cuahsi.atlassian.net/browse/<KEY>`, and pass the completed body to `gh pr create --base {{BASE_BRANCH}} --title "<title>" --body-file <file>`. Comment the resulting PR URL on the Story (`acli jira workitem comment create --key <KEY> --body "PR: <url>"`), then transition it to `In Review`.
+2. **Reviewed and/or merged**: when the user says the PR has been reviewed or merged, transition the Story from `In Review` to `Done` and post a Jira comment identifying the PR and the reported event. Show the exact posted comment in chat. Describe only what is known; a review does not necessarily mean approval or a merge. Whenever you come across a Story in `In Review`, check its PR with `gh pr view <n> --json state`; if it reports `MERGED`, complete the Story and comment in the same way.
+3. **Closed without merging**: comment the reason on the Story and move it back to `In Progress`, or to `Won't Do` if the work is abandoned. If the user reports that the PR was reviewed, follow **Reviewed and/or merged** instead.
+
+Read back the Story's status and comments after the Jira writes. Skip writes already satisfied and avoid duplicate comments on retries, but comment on each distinct event (for example, a later merge after a review). If a completion comment already exists, show it in chat instead of duplicating it. Report any failed or blocked action rather than claiming it succeeded.
 
 **PRs as a request surface: no.** _(Set to `yes` if this repo treats external PRs as feature requests; `/triage` reads this flag.)_ When `yes`, triage external PRs with `gh pr view <n> --comments`, `gh pr diff <n>`, `gh pr comment`, `gh pr edit --add-label`/`--remove-label`, and `gh pr close`.
 
