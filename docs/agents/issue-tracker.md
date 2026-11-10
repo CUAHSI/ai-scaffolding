@@ -40,11 +40,11 @@ List the current set with `acli jira workitem search --jql "parent = CAM-1616 AN
 
 ## Conventions
 
-- **Create a Story**: `acli jira workitem create --project CAM --type Story --parent <EPIC-KEY> --label "ProgramDev,AI" --summary "..." --description-file /tmp/jira-description.json`. For headings or lists, write the description as ADF JSON as shown below. Plain text is fine for unformatted descriptions, but Jira displays Markdown markers literally.
+- **Create a Story**: `PAGER=cat acli jira workitem create --project CAM --type Story --parent <EPIC-KEY> --label "ProgramDev,AI" --summary "..." --description-file /tmp/jira-description.json`. For headings or lists, write the description as ADF JSON as shown below. Plain text is fine for unformatted descriptions, but Jira displays Markdown markers literally.
 
 - **Create an Epic**: same as above with `--type Epic --parent CAM-1616`.
 
-- **Edit a description**: `acli jira workitem edit --key <KEY> --description-file /tmp/jira-description.json --yes`. This replaces the whole description; read it first and preserve any existing content you need.
+- **Edit a description**: `PAGER=cat acli jira workitem edit --key <KEY> --description-file /tmp/jira-description.json --yes`. This replaces the whole description; read it first and preserve any existing content you need.
 
 ### Rich-text descriptions (ADF)
 
@@ -66,7 +66,7 @@ For structured ticket text, write an ADF document to `/tmp/jira-description.json
 }
 ```
 
-Replace the example text with the full ticket content, preserving its order. Pass the JSON file to the create or edit command above. Verify with `PAGER=cat acli jira workitem view <KEY> --fields "description" --json | cat`: `fields.description.content` should contain `heading` and `bulletList` nodes, with each bullet inside a `listItem`. Check the rendered Jira description too. For an unformatted description, use `--description "Plain text"` instead of `--description-file`; do not pass Markdown-style headings or bullets as plain text.
+Replace the example text with the full ticket content, preserving its order. Pass the JSON file to the create or edit command above. Verify with `PAGER=cat acli jira workitem view <KEY> --fields "description" --json | cat`: `fields.description.content` should contain `heading` and `bulletList` nodes, with each bullet inside a `listItem`. Compare the returned heading and bullet text and order with the JSON file, then check the rendered Jira description too. For an unformatted description, use `--description "Plain text"` instead of `--description-file`; do not pass Markdown-style headings or bullets as plain text.
 
 - **Read a work item**: `acli jira workitem view <KEY> --fields "summary,issuetype,status,parent,labels,description,comment" --json`.
 
