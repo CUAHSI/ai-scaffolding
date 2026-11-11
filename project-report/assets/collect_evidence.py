@@ -1,7 +1,9 @@
 """Collect paginated, read-only Jira evidence for the project-report agent skill.
 
-This produces source data, not a report. The agent must assess historical claims,
-uncertainty, citations, and delivery using SKILL.md and evidence.md.
+This produces source data, not a report. Comment bodies lacking cutoff-valid
+creation and edit timestamps are withheld, with their IDs and reasons retained.
+The agent must assess historical claims, uncertainty, citations, and delivery
+using SKILL.md and evidence.md.
 """
 
 import argparse
@@ -22,6 +24,16 @@ ISSUE_FIELDS = (
     "duedate,customfield_10504,description,updated"
 )
 PAGE_SIZE = 100
+REQUESTED_FIELDS = ISSUE_FIELDS.split(",")
+
+
+class PartialRetrieval(RuntimeError):
+    """A paginated request failed after zero or more usable records."""
+
+    def __init__(self, message, records, page):
+        super().__init__(message)
+        self.records = records
+        self.page = page
 
 
 def timestamp(instant):
@@ -39,6 +51,17 @@ def timestamp(instant):
     """
     precision = "microseconds" if instant.microsecond else "seconds"
     return instant.astimezone(timezone.utc).isoformat(timespec=precision).replace("+00:00", "Z")
+
+
+def recorded_before_cutoff(value, cutoff):
+    """Whether a Jira timestamp proves a record existed before the cutoff."""
+    if not isinstance(value, str):
+        return False
+    try:
+        instant = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        return instant.tzinfo is not None and instant < cutoff
+    except ValueError:
+        return False
 
 
 def parse_date(value):
@@ -120,9 +143,12 @@ class JiraReader:
         if result.returncode:
             raise RuntimeError(f"GET {path} failed: {result.stderr.strip()}")
         try:
-            return json.loads(result.stdout)
+            response = json.loads(result.stdout)
         except json.JSONDecodeError as error:
             raise RuntimeError(f"GET {path} returned invalid JSON") from error
+        if not isinstance(response, dict):
+            raise RuntimeError(f"GET {path} returned a non-object response")
+        return response
 
     def issue(self, key):
         """Fetch the fields needed to assess one Jira work item.
@@ -154,26 +180,35 @@ class JiraReader:
 
         Raises
         ------
-        RuntimeError
-            If search pagination is incomplete or cannot advance.
+        PartialRetrieval
+            If a search page fails; carries all previously returned child keys.
         """
         token = None
         seen_tokens = set()
         children = []
+        page_number = 1
         while True:
             params = {"jql": f"parent = {key} ORDER BY key", "fields": "key", "maxResults": PAGE_SIZE}
             if token is not None:
                 params["nextPageToken"] = token
-            page = self.get("search/jql", **params)
-            if not isinstance(page.get("issues"), list) or not isinstance(page.get("isLast"), bool):
-                raise RuntimeError(f"Search for children of {key} returned an incomplete page")
-            children.extend(issue["key"] for issue in page["issues"])
-            if page["isLast"]:
-                return children
-            token = page.get("nextPageToken")
-            if not token or token in seen_tokens:
-                raise RuntimeError(f"Search for children of {key} has no usable nextPageToken")
+            try:
+                page = self.get("search/jql", **params)
+                if not isinstance(page.get("issues"), list) or not isinstance(page.get("isLast"), bool):
+                    raise RuntimeError(f"Search for children of {key} returned an incomplete page")
+                keys = [issue["key"] for issue in page["issues"]]
+                if not all(isinstance(child_key, str) for child_key in keys):
+                    raise RuntimeError(f"Search for children of {key} returned an invalid key")
+                children.extend(keys)
+                if page["isLast"]:
+                    return children
+                next_token = page.get("nextPageToken")
+                if not isinstance(next_token, str) or not next_token or next_token in seen_tokens:
+                    raise RuntimeError(f"Search for children of {key} has no usable nextPageToken")
+            except (RuntimeError, KeyError, TypeError) as error:
+                raise PartialRetrieval(str(error), children, page_number) from error
+            token = next_token
             seen_tokens.add(token)
+            page_number += 1
 
     def pages(self, key, kind):
         """Retrieve every comment or changelog entry for one issue.
@@ -192,25 +227,31 @@ class JiraReader:
 
         Raises
         ------
-        RuntimeError
-            If a page is malformed or pagination stops early.
+        PartialRetrieval
+            If a page fails; carries all previously returned entries.
         """
         path = f"issue/{quote(key, safe='')}/{kind}"
         item_key = "comments" if kind == "comment" else "values"
         offset = 0
         results = []
+        page_number = 1
         while True:
-            page = self.get(path, startAt=offset, maxResults=PAGE_SIZE)
-            values = page.get(item_key)
-            total = page.get("total")
-            if not isinstance(values, list) or not isinstance(total, int) or page.get("startAt") != offset:
-                raise RuntimeError(f"Incomplete {kind} page for {key} at {offset}")
-            results.extend(values)
-            offset += len(values)
-            if offset >= total:
-                return results
-            if not values:
-                raise RuntimeError(f"Incomplete {kind} page for {key} at {offset}")
+            try:
+                page = self.get(path, startAt=offset, maxResults=PAGE_SIZE)
+                values = page.get(item_key)
+                total = page.get("total")
+                if (not isinstance(values, list) or not isinstance(total, int)
+                        or page.get("startAt") != offset or total < offset + len(values)):
+                    raise RuntimeError(f"Incomplete {kind} page for {key} at {offset}")
+                results.extend(values)
+                offset += len(values)
+                if offset >= total:
+                    return results
+                if not values:
+                    raise RuntimeError(f"Incomplete {kind} page for {key} at {offset}")
+            except RuntimeError as error:
+                raise PartialRetrieval(str(error), results, page_number) from error
+            page_number += 1
 
 
 def collect(reader, root_key, start, end, zone):
@@ -235,14 +276,14 @@ def collect(reader, root_key, start, end, zone):
     Returns
     -------
     dict
-        Root, UTC period boundaries, descendant records, and coverage note.
+        Root, UTC period boundaries, accessible descendants, and retrieval gaps.
 
     Raises
     ------
     ValueError
         If the dates or root issue type are invalid.
     RuntimeError
-        If descendant membership is inconsistent or retrieval fails.
+        If the root or all descendants are inaccessible after a retrieval failure.
     """
     retrieved_at = datetime.now(timezone.utc)
     today = retrieved_at.astimezone(zone).date()
@@ -256,27 +297,85 @@ def collect(reader, root_key, start, end, zone):
     cutoff = retrieved_at if provisional else end_exclusive_utc
 
     root = reader.issue(root_key)
-    if root.get("fields", {}).get("issuetype", {}).get("name") not in {"Research Project", "Objective", "Epic"}:
+    if root.get("key") != root_key or not isinstance(root.get("fields"), dict):
+        raise RuntimeError(f"Reporting root {root_key} is inaccessible or incomplete")
+    if (root["fields"].get("issuetype") or {}).get("name") not in {"Research Project", "Objective", "Epic"}:
         raise ValueError("Reporting root must be a Research Project, Objective, or Epic")
 
     queue = deque([root_key])
     seen = {root_key}
     items = []
+    failures = []
     while queue:
         parent = queue.popleft()
-        for key in reader.children(parent):
+        try:
+            child_keys = reader.children(parent)
+        except PartialRetrieval as error:
+            child_keys = error.records
+            failures.append({"key": parent, "endpoint": "children", "page": error.page,
+                             "reason": str(error)})
+        for key in child_keys:
             if key in seen:
-                raise RuntimeError(f"Duplicate or cyclic descendant: {key}")
+                failures.append({"key": key, "endpoint": "children", "page": None,
+                                 "reason": f"Duplicate or cyclic descendant beneath {parent}"})
+                continue
             seen.add(key)
-            issue = reader.issue(key)
-            if issue.get("fields", {}).get("parent", {}).get("key") != parent:
-                raise RuntimeError(f"Parent of {key} differs from search result; scope is uncertain")
-            items.append({
-                "issue": issue,
-                "comments": reader.pages(key, "comment"),
-                "changelog": reader.pages(key, "changelog"),
-            })
+            try:
+                issue = reader.issue(key)
+            except RuntimeError as error:
+                failures.append({"key": key, "endpoint": "issue", "page": None,
+                                 "reason": str(error) + "; descendants cannot be discovered"})
+                continue
+            if issue.get("key") != key or not isinstance(issue.get("fields"), dict):
+                failures.append({"key": key, "endpoint": "issue", "page": None,
+                                 "reason": "Issue identity or fields unavailable; descendants cannot be discovered"})
+                continue
+            if (issue["fields"].get("parent") or {}).get("key") != parent:
+                failures.append({"key": key, "endpoint": "issue", "field": "parent", "page": None,
+                                 "reason": f"Parent differs from search result ({parent}); scope is uncertain"})
+                continue
+            for field in REQUESTED_FIELDS:
+                if field not in issue["fields"]:
+                    failures.append({"key": key, "endpoint": "issue", "field": field, "page": None,
+                                     "reason": "Requested field not returned; historical value unknown"})
+            record = {"issue": issue}
+            for kind, name in (("comment", "comments"), ("changelog", "changelog")):
+                try:
+                    record[name] = reader.pages(key, kind)
+                    record[f"{name}_complete"] = True
+                except PartialRetrieval as error:
+                    record[name] = error.records
+                    record[f"{name}_complete"] = False
+                    failures.append({"key": key, "endpoint": kind, "page": error.page,
+                                     "reason": str(error)})
+            valid_comments = []
+            excluded_comments = []
+            for comment in record["comments"]:
+                created = comment.get("created") if isinstance(comment, dict) else None
+                updated = comment.get("updated") if isinstance(comment, dict) else None
+                if recorded_before_cutoff(created, cutoff) and recorded_before_cutoff(updated, cutoff):
+                    valid_comments.append(comment)
+                else:
+                    reason = ("creation time unavailable or after cutoff"
+                              if not recorded_before_cutoff(created, cutoff)
+                              else "edit time unavailable or after cutoff; earlier text cannot be verified")
+                    excluded_comments.append({"id": comment.get("id") if isinstance(comment, dict) else None,
+                                              "created": created, "updated": updated, "reason": reason})
+            record["comments"] = valid_comments
+            record["excluded_comments"] = excluded_comments
+            items.append(record)
             queue.append(key)
+
+    if failures and not any(
+        recorded_before_cutoff(record["issue"]["fields"].get("created"), cutoff)
+        or bool(record["comments"])
+        or any(recorded_before_cutoff(change.get("created"), cutoff)
+               for change in record["changelog"])
+        for record in items
+    ):
+        raise RuntimeError("Descendant retrieval failed and no usable cutoff evidence was found: "
+                           + "; ".join(f"{gap['key']} {gap['endpoint']} page {gap['page']}: {gap['reason']}"
+                                       for gap in failures))
 
     return {
         "root": root,
@@ -291,6 +390,8 @@ def collect(reader, root_key, start, end, zone):
             "provisional": provisional,
         },
         "items": items,
+        "partial": bool(failures),
+        "failures": failures,
         "coverage": "Current descendant discovery does not establish historical membership; moved-out, deleted, or inaccessible work may be absent.",
     }
 
