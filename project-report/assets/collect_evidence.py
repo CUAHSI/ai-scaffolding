@@ -25,18 +25,65 @@ PAGE_SIZE = 100
 
 
 def timestamp(instant):
+    """Format an instant as a UTC timestamp without losing cutoff precision.
+
+    Parameters
+    ----------
+    instant : datetime
+        Timezone-aware instant to format.
+
+    Returns
+    -------
+    str
+        ISO 8601 UTC timestamp ending in ``Z``.
+    """
     precision = "microseconds" if instant.microsecond else "seconds"
     return instant.astimezone(timezone.utc).isoformat(timespec=precision).replace("+00:00", "Z")
 
 
 def parse_date(value):
+    """Parse a reporting date in the required ISO calendar format.
+
+    Parameters
+    ----------
+    value : str
+        Calendar date in ``YYYY-MM-DD`` form.
+
+    Returns
+    -------
+    date
+        Parsed calendar date.
+
+    Raises
+    ------
+    ValueError
+        If the date is invalid or not in the required format.
+    """
     if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", value):
         raise ValueError(f"Expected an ISO calendar date (YYYY-MM-DD): {value}")
     return date.fromisoformat(value)
 
 
 class JiraReader:
+    """Read Jira issues and complete paginated records using GET requests."""
+
     def __init__(self, site, netrc_file):
+        """Configure the Jira host and check that REST credentials are private.
+
+        Parameters
+        ----------
+        site : str
+            Jira hostname, without a scheme or path.
+        netrc_file : Path
+            Private netrc file supplied only to curl.
+
+        Raises
+        ------
+        ValueError
+            If the host is invalid or the credential file is not private.
+        OSError
+            If the credential file cannot be inspected.
+        """
         if not re.fullmatch(r"[a-zA-Z0-9.-]+", site):
             raise ValueError("--site must be a Jira hostname, without a scheme or path")
         mode = netrc_file.stat().st_mode
@@ -46,6 +93,25 @@ class JiraReader:
         self.netrc_file = netrc_file
 
     def get(self, path, **params):
+        """Fetch JSON from a Jira REST path with URL-encoded query parameters.
+
+        Parameters
+        ----------
+        path : str
+            Path relative to Jira's REST API v3 endpoint.
+        **params : object
+            Query parameters to encode for a GET request.
+
+        Returns
+        -------
+        dict
+            Decoded Jira response.
+
+        Raises
+        ------
+        RuntimeError
+            If the GET fails or Jira returns invalid JSON.
+        """
         args = ["curl", "-fsS", "--get", "--netrc-file", str(self.netrc_file)]
         for name, value in params.items():
             args.extend(("--data-urlencode", f"{name}={value}"))
@@ -59,9 +125,38 @@ class JiraReader:
             raise RuntimeError(f"GET {path} returned invalid JSON") from error
 
     def issue(self, key):
+        """Fetch the fields needed to assess one Jira work item.
+
+        Parameters
+        ----------
+        key : str
+            Jira issue key.
+
+        Returns
+        -------
+        dict
+            Issue response, including its requested fields.
+        """
         return self.get(f"issue/{quote(key, safe='')}", fields=ISSUE_FIELDS)
 
     def children(self, key):
+        """Find every current direct child of an issue across search pages.
+
+        Parameters
+        ----------
+        key : str
+            Parent Jira issue key.
+
+        Returns
+        -------
+        list[str]
+            Direct child keys in search order.
+
+        Raises
+        ------
+        RuntimeError
+            If search pagination is incomplete or cannot advance.
+        """
         token = None
         seen_tokens = set()
         children = []
@@ -81,6 +176,25 @@ class JiraReader:
             seen_tokens.add(token)
 
     def pages(self, key, kind):
+        """Retrieve every comment or changelog entry for one issue.
+
+        Parameters
+        ----------
+        key : str
+            Jira issue key.
+        kind : str
+            Jira endpoint name: ``comment`` or ``changelog``.
+
+        Returns
+        -------
+        list[dict]
+            All entries returned by the paginated endpoint.
+
+        Raises
+        ------
+        RuntimeError
+            If a page is malformed or pagination stops early.
+        """
         path = f"issue/{quote(key, safe='')}/{kind}"
         item_key = "comments" if kind == "comment" else "values"
         offset = 0
@@ -100,6 +214,36 @@ class JiraReader:
 
 
 def collect(reader, root_key, start, end, zone):
+    """Collect a dated evidence bundle for every current descendant.
+
+    The bundle retains raw Jira records for the reporting agent to assess;
+    it does not infer historical outcomes or produce a report.
+
+    Parameters
+    ----------
+    reader : JiraReader
+        Authenticated, read-only Jira client.
+    root_key : str
+        Key of a Research Project, Objective, or Epic.
+    start : date
+        First included local calendar day.
+    end : date
+        Last included local calendar day.
+    zone : ZoneInfo
+        IANA reporting timezone used for calendar boundaries.
+
+    Returns
+    -------
+    dict
+        Root, UTC period boundaries, descendant records, and coverage note.
+
+    Raises
+    ------
+    ValueError
+        If the dates or root issue type are invalid.
+    RuntimeError
+        If descendant membership is inconsistent or retrieval fails.
+    """
     retrieved_at = datetime.now(timezone.utc)
     today = retrieved_at.astimezone(zone).date()
     if start > end:
@@ -152,6 +296,13 @@ def collect(reader, root_key, start, end, zone):
 
 
 def main():
+    """Parse CLI inputs and print a complete read-only Jira evidence bundle.
+
+    Returns
+    -------
+    int
+        Exit status: zero on success, one on a collection error.
+    """
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("root", help="Jira key of the reporting root")
     parser.add_argument("start", help="inclusive local YYYY-MM-DD")
