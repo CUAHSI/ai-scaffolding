@@ -24,7 +24,8 @@ Install and configure the following before running `cuahsi-project-setup`.
 | [Git](https://git-scm.com/) | Source control |
 | [GitHub CLI (`gh`)](https://cli.github.com/) | Branches and pull requests |
 | [Atlassian CLI (`acli`)](https://developer.atlassian.com/cloud/acli/) | Creating, reading, and updating Jira work items |
-| `curl` + `~/.jira/netrc` | Jira REST calls that `acli` can't make (sprints, start dates, due dates, links) |
+| `curl` + `~/.jira/netrc` | Jira REST calls that `acli` can't make (sprints, start dates, due dates, links, complete report evidence) |
+| Python 3.9+ with IANA timezone data | Read-only `project-report` evidence collector (calendar-day boundaries and paginated Jira history); use the skill's manual GET-only retrieval path if unavailable |
 | [`mattpocock/skills`](https://github.com/mattpocock/skills) | Provides `setup-matt-pocock-skills` and the engineering skills that `cuahsi-project-setup` configures |
 
 ### 1. Node.js and Git
