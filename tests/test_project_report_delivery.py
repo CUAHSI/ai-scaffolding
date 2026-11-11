@@ -35,6 +35,20 @@ class ReportDeliveryTests(unittest.TestCase):
         self.assertEqual(first.read_text(), self.source.read_text())
         self.assertEqual(second.read_text(), self.source.read_text())
 
+    def test_label_report_uses_safe_selector_filename_without_overwriting(self):
+        destination = self.directory / "reports"
+        args = [sys.executable, str(SAVER), "HydroFabric", "2026-10-01", "2026-10-31", "brief",
+                "--project-label", "--source", str(self.source), "--destination", str(destination)]
+        first = subprocess.run(args, capture_output=True, text=True, check=False)
+        second = subprocess.run(args, capture_output=True, text=True, check=False)
+        self.assertEqual(first.returncode, 0, first.stderr)
+        self.assertEqual(second.returncode, 0, second.stderr)
+        first_path, second_path = Path(first.stdout.strip()), Path(second.stdout.strip())
+        self.assertRegex(first_path.name, r"^label-hydrofabric_2026-10-01_2026-10-31_brief_\d{8}T\d{6}Z\.md$")
+        self.assertNotEqual(first_path, second_path)
+        self.assertEqual(first_path.read_text(), self.source.read_text())
+        self.assertEqual(second_path.read_text(), self.source.read_text())
+
     def test_unwritable_destination_fails_without_losing_report_text_or_existing_file(self):
         destination = self.directory / "already-a-file"
         destination.write_text("preserve me")

@@ -21,10 +21,14 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 ISSUE_FIELDS = (
     "summary,issuetype,parent,created,status,resolution,resolutiondate,assignee,"
-    "duedate,customfield_10504,description,updated"
+    "duedate,customfield_10504,description,updated,labels"
 )
 PAGE_SIZE = 100
-REQUESTED_FIELDS = ISSUE_FIELDS.split(",")
+REQUESTED_FIELDS = [field for field in ISSUE_FIELDS.split(",") if field != "labels"]
+
+
+class AmbiguousLabel(ValueError):
+    """Multiple spellings could represent the requested project label."""
 
 
 class PartialRetrieval(RuntimeError):
@@ -62,6 +66,17 @@ def recorded_before_cutoff(value, cutoff):
         return instant.tzinfo is not None and instant < cutoff
     except ValueError:
         return False
+
+
+def has_cutoff_evidence(items, cutoff):
+    """Whether at least one descendant has a trustworthy pre-cutoff record."""
+    return any(
+        recorded_before_cutoff(record["issue"]["fields"].get("created"), cutoff)
+        or bool(record["comments"])
+        or any(recorded_before_cutoff(change.get("created"), cutoff)
+               for change in record["changelog"])
+        for record in items
+    )
 
 
 def parse_date(value):
@@ -165,6 +180,56 @@ class JiraReader:
         """
         return self.get(f"issue/{quote(key, safe='')}", fields=ISSUE_FIELDS)
 
+    def projects(self, label, project):
+        """Find Research Projects matching a label inside a permitted Jira project."""
+        if not isinstance(label, str) or not label.strip():
+            raise ValueError("Specify a non-empty Research Project label")
+        if project is not None and not re.fullmatch(r"[A-Z][A-Z0-9_]*", project):
+            raise ValueError("--project must be a Jira project key")
+        escaped = label.strip().replace("\\", "\\\\").replace('"', '\\"')
+        scope = f"project = {project} AND " if project else ""
+        jql = (f'{scope}issuetype = "Research Project" '
+               f'AND labels = "{escaped}" ORDER BY key')
+        token = None
+        seen_tokens = set()
+        projects = []
+        page_number = 1
+        while True:
+            params = {"jql": jql, "fields": "key,summary,labels,issuetype", "maxResults": PAGE_SIZE}
+            if token is not None:
+                params["nextPageToken"] = token
+            try:
+                page = self.get("search/jql", **params)
+                if not isinstance(page.get("issues"), list) or not isinstance(page.get("isLast"), bool):
+                    raise RuntimeError("Research Project label search returned an incomplete page")
+                projects.extend(page["issues"])
+                if page["isLast"]:
+                    break
+                next_token = page.get("nextPageToken")
+                if not isinstance(next_token, str) or not next_token or next_token in seen_tokens:
+                    raise RuntimeError("Research Project label search has no usable nextPageToken")
+            except RuntimeError as error:
+                raise PartialRetrieval(str(error), projects, page_number) from error
+            token = next_token
+            seen_tokens.add(token)
+            page_number += 1
+        return self.resolve_projects(projects, label, project)
+
+    @staticmethod
+    def resolve_projects(projects, label, project):
+        """Resolve exact label spelling from an accessible Research Project search."""
+        matches = [issue for issue in projects
+                   if issue.get("fields", {}).get("issuetype", {}).get("name") == "Research Project"
+                   and any(name.casefold() == label.strip().casefold()
+                           for name in issue.get("fields", {}).get("labels", []))]
+        if not matches:
+            raise ValueError(f"No Research Projects match label {label!r} in {project or 'the accessible scope'}; confirm the label")
+        names = {name for issue in matches for name in issue["fields"]["labels"]
+                 if name.casefold() == label.strip().casefold()}
+        if len(names) != 1:
+            raise AmbiguousLabel(f"Ambiguous Research Project label {label!r}: {', '.join(sorted(names))}; clarify")
+        return matches, names.pop()
+
     def children(self, key):
         """Find every current direct child of an issue across search pages.
 
@@ -254,7 +319,7 @@ class JiraReader:
             page_number += 1
 
 
-def collect(reader, root_key, start, end, zone):
+def collect(reader, root_key, start, end, zone, retrieved_at=None, expected_label=None):
     """Collect a dated evidence bundle for every current descendant.
 
     The bundle retains raw Jira records for the reporting agent to assess;
@@ -285,7 +350,7 @@ def collect(reader, root_key, start, end, zone):
     RuntimeError
         If the root or all descendants are inaccessible after a retrieval failure.
     """
-    retrieved_at = datetime.now(timezone.utc)
+    retrieved_at = retrieved_at or datetime.now(timezone.utc)
     today = retrieved_at.astimezone(zone).date()
     if start > end:
         raise ValueError("Reporting start date is after end date")
@@ -301,6 +366,10 @@ def collect(reader, root_key, start, end, zone):
         raise RuntimeError(f"Reporting root {root_key} is inaccessible or incomplete")
     if (root["fields"].get("issuetype") or {}).get("name") not in {"Research Project", "Objective", "Epic"}:
         raise ValueError("Reporting root must be a Research Project, Objective, or Epic")
+    if expected_label and (root["fields"]["issuetype"]["name"] != "Research Project"
+                           or not any(isinstance(name, str) and name.casefold() == expected_label.casefold()
+                                      for name in root["fields"].get("labels") or [])):
+        raise RuntimeError(f"Research Project {root_key} no longer carries label {expected_label!r}")
 
     queue = deque([root_key])
     seen = {root_key}
@@ -366,13 +435,7 @@ def collect(reader, root_key, start, end, zone):
             items.append(record)
             queue.append(key)
 
-    if failures and not any(
-        recorded_before_cutoff(record["issue"]["fields"].get("created"), cutoff)
-        or bool(record["comments"])
-        or any(recorded_before_cutoff(change.get("created"), cutoff)
-               for change in record["changelog"])
-        for record in items
-    ):
+    if failures and not has_cutoff_evidence(items, cutoff):
         raise RuntimeError("Descendant retrieval failed and no usable cutoff evidence was found: "
                            + "; ".join(f"{gap['key']} {gap['endpoint']} page {gap['page']}: {gap['reason']}"
                                        for gap in failures))
@@ -396,6 +459,79 @@ def collect(reader, root_key, start, end, zone):
     }
 
 
+def collect_label(reader, label, project, start, end, zone):
+    """Collect a label-selected Research Project using the same evidence contract."""
+    search_gap = None
+    try:
+        projects, resolved_label = reader.projects(label, project)
+    except PartialRetrieval as error:
+        search_gap = {"key": None, "endpoint": "projects", "page": error.page,
+                      "reason": str(error)}
+        if not error.records:
+            raise RuntimeError(f"Project label search failed at page {error.page}: {error}") from error
+        try:
+            projects, resolved_label = reader.resolve_projects(error.records, label, project)
+        except AmbiguousLabel:
+            raise
+        except ValueError as no_match:
+            raise RuntimeError(f"Project label search incomplete at page {error.page}; "
+                               "no usable Research Project match found") from no_match
+    unique_projects = []
+    duplicates = []
+    seen_keys = set()
+    for issue in projects:
+        key = issue.get("key")
+        if not isinstance(key, str):
+            duplicates.append({"key": None, "endpoint": "projects", "page": None,
+                               "reason": "Project search returned an invalid key"})
+        elif key in seen_keys:
+            duplicates.append({"key": key, "endpoint": "projects", "page": None,
+                               "reason": "Duplicate Research Project across search pages; membership uncertain"})
+        else:
+            seen_keys.add(key)
+            unique_projects.append(issue)
+    projects = unique_projects
+    retrieved_at = datetime.now(timezone.utc)
+    if start > end or end > retrieved_at.astimezone(zone).date():
+        raise ValueError("Label report requires a non-reversed historical date range")
+    bundles = []
+    failures = ([search_gap] if search_gap else []) + duplicates
+    for issue in projects:
+        try:
+            bundles.append((issue, collect(reader, issue["key"], start, end, zone, retrieved_at,
+                                           expected_label=resolved_label)))
+        except (RuntimeError, ValueError) as error:
+            failures.append({"key": issue["key"], "endpoint": "root", "page": None,
+                             "reason": f"Research Project inaccessible or insufficient evidence: {error}"})
+    if not bundles:
+        raise RuntimeError("No accessible Research Project has usable cutoff evidence: "
+                           + "; ".join(f"{gap['key']}: {gap['reason']}" for gap in failures))
+    result = dict(bundles[0][1])
+    result["roots"] = []
+    result["items"] = []
+    result["failures"] = failures
+    for issue, bundle in bundles:
+        result["roots"].append(bundle["root"])
+        for item in bundle["items"]:
+            item["reporting_root"] = issue["key"]
+            result["items"].append(item)
+        result["failures"].extend(bundle["failures"])
+    result.pop("root")
+    result["partial"] = bool(result["failures"])
+    cutoff = datetime.fromisoformat(result["period"]["cutoff_utc"].replace("Z", "+00:00"))
+    if result["partial"] and not has_cutoff_evidence(result["items"], cutoff):
+        raise RuntimeError("Label retrieval failed and no usable cutoff evidence was found: "
+                           + "; ".join(f"{gap['key']} {gap['endpoint']} page {gap['page']}: {gap['reason']}"
+                                       for gap in result["failures"]))
+    result["project_label"] = resolved_label
+    result["matched_projects"] = [{"key": issue["key"], "summary": issue["fields"]["summary"]}
+                                  for issue in projects]
+    result["coverage"] += " Current label membership is not necessarily a historical snapshot at the cutoff."
+    if search_gap:
+        result["coverage"] += " Unseen matching Research Projects may be absent after the failed search page."
+    return result
+
+
 def main():
     """Parse CLI inputs and print a complete read-only Jira evidence bundle.
 
@@ -405,10 +541,12 @@ def main():
         Exit status: zero on success, one on a collection error.
     """
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("root", help="Jira key of the reporting root")
+    parser.add_argument("root", help="Jira root key (or label with --project-label)")
     parser.add_argument("start", help="inclusive local YYYY-MM-DD")
     parser.add_argument("end", help="inclusive local YYYY-MM-DD")
     parser.add_argument("--site", required=True, help="Jira hostname from the invoking project's guidance")
+    parser.add_argument("--project-label", action="store_true", help="interpret root argument as a Research Project label")
+    parser.add_argument("--project", help="permitted Jira project key for label search")
     parser.add_argument("--timezone", help="IANA timezone (defaults to the authenticated Jira user's timezone)")
     parser.add_argument("--netrc-file", type=Path, default=Path.home() / ".jira/netrc")
     args = parser.parse_args()
@@ -419,7 +557,12 @@ def main():
         if not zone_name:
             raise ValueError("Jira has no reporting timezone; specify --timezone")
         zone = ZoneInfo(zone_name)
-        result = collect(reader, args.root, start, end, zone)
+        if args.project_label:
+            result = collect_label(reader, args.root, args.project, start, end, zone)
+        else:
+            if args.project:
+                raise ValueError("--project requires --project-label")
+            result = collect(reader, args.root, start, end, zone)
     except (OSError, ValueError, ZoneInfoNotFoundError, RuntimeError, KeyError) as error:
         print(f"Evidence collection failed: {error}", file=sys.stderr)
         return 1
