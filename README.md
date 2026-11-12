@@ -7,7 +7,7 @@ Agent skills for setting up CUAHSI software projects for AI-assisted engineering
 | Skill | Summary |
 | --- | --- |
 | [`cuahsi-project-setup`](cuahsi-project-setup/SKILL.md) | One-time setup of a repo for the engineering skills, following CUAHSI project guidelines: GitHub for code and PRs, Jira for issues. It first checks that `gh`, `acli`, the Jira `netrc` credentials, and `setup-matt-pocock-skills` are ready. It then collects the project's Jira Objective, project labels, and base branch, runs `setup-matt-pocock-skills` with Jira as the issue tracker, and adds a PR template that links each PR to its Story. You must invoke it by name, since the agent won't trigger it automatically. |
-| [`cuahsi-project-management`](cuahsi-project-management/SKILL.md) | Explicitly user-invoked kickoff and Project Charter drafting or revision for funded projects and Core Award Activities. Produces a roughly two-page charter in chat, keeps missing information explicit, and reserves sign-off for the PI or owning activity co-PI. |
+| [`cuahsi-project-management`](cuahsi-project-management/SKILL.md) | Explicitly user-invoked kickoff, Project Charter drafting/revision, and private central-repository publication. Keeps approved charters on `main`, drafts on `develop`, and append-only decision logs adjacent to approved charters; requires PI/owning co-PI sign-off and verified staff-only access. |
 | [`project-report`](project-report/SKILL.md) | Manually invoked, read-only historical Jira reporting for an explicit Research Project, Objective, or Epic, or a label selecting all matching Research Projects, and an inclusive date range. Produces cited Markdown under `reports/` and displays it in chat; accepts a timezone, people filter, format, and destination override. |
 
 ### Supporting assets
@@ -178,11 +178,11 @@ Once setup is done, the engineering skills follow CUAHSI conventions:
 - Reporting that a PR was reviewed or merged moves the Story to `Done` and adds a Jira comment, shown in chat. A review alone triggers this even if the PR has not been merged.
 - These workflow actions need no separate approval; missing or ambiguous information and failed actions are reported.
 
-### Project kickoff and charter revision
+### Project kickoff, charter revision, and publication
 
 `cuahsi-project-management` ships in the top-level `cuahsi-project-management/` directory, alongside `cuahsi-project-setup`. It runs only when explicitly invoked (`disable-model-invocation: true`).
 
-**Prerequisites:** a compatible agent and the installed skill. Inputs can come from supplied documents and conversation; this local workflow needs no GitHub, Jira, SharePoint, or email credentials, and does not require project setup or external provisioning.
+**Kickoff/revision prerequisites:** a compatible agent and the installed skill. Inputs can come from supplied documents and conversation; these local workflows need no GitHub, Jira, SharePoint, or email credentials, and do not require project setup or external provisioning.
 
 ```text
 /cuahsi-project-management kickoff using the supplied proposal and our conversation; draft the charter in chat.
@@ -193,7 +193,23 @@ Charter revisions require an explicit grilling or Wayfinder session, not silent 
 
 **Output and safety limits:** keep the charter in chat unless the user explicitly chooses a private destination outside both the source checkout and the installed skill. Preserve source documents and prior charter versions; do not overwrite originals. Link budget and HR materials rather than copying their contents into the charter.
 
-CAM-1633 covers kickoff and charter drafting/revision only. Central private repository publication, transcript processing, scheduling, reports, and a hosted site belong to future Stories and are not implemented here. The existing `project-report` skill remains unchanged, Jira-only, and read-only.
+#### Publish to the private central repository
+
+CAM-1634 adds a separate explicit publication workflow within the same skill:
+
+```text
+/cuahsi-project-management publish the signed-off charter to CUAHSI/CUAHSI-ProjectStream; approved charters belong on main and in-progress charters on develop.
+/cuahsi-project-management publish this candidate to develop only; PI sign-off is still pending.
+/cuahsi-project-management publish; plan only, no live writes.
+```
+
+**Publication prerequisites:** Git/GitHub CLI credentials for the authorized private repository/workspace, a canonical accounting code, a named access administrator, Tony's tooling approval, and an authorized staff roster/access audit. Approved publication additionally requires the exact charter's dated, attributable PI or owning co-PI approval. Repository privacy or organization membership alone does not prove staff-only access; failed/inaccessible checks remain explicit blockers, including for draft storage. Keep live charters and access evidence outside this source repository and installed skill.
+
+Follow [Publication](cuahsi-project-management/assets/publication.md). The central layout is `projects/<accounting-code>/charter.md` with adjacent `decision-log.md`; approved content lives on `main`, in-progress candidates on `develop`. Promote only the signed-off candidate, never unrelated drafts by merging all of `develop`. Initialize an empty log without inventing decisions; preserve existing entries, appending corrections through employee-reviewed decision PRs. Employees may self-merge decision PRs, but that does not substitute for charter sign-off. Link every related project/activity repository to the approved `blob/main` charter without copying restricted content.
+
+The bundled [repository policy](cuahsi-project-management/assets/repository-policy-template.md) records owners, access/branch configuration, evidence, and per-repository links; the [decision PR template](cuahsi-project-management/assets/decision-pr-template.md) includes AI/review metadata and the withheld-items checkbox. A plan or open PR is not verified publication. Run [synthetic publication scenarios](cuahsi-project-management/assets/publication-scenarios.md) separately from live checks; reusable assets alone do not establish operational acceptance.
+
+Automated transcript processing/decision extraction, scheduling, reports, exports, and a hosted site remain future Stories. The existing `project-report` skill remains unchanged, Jira-only, and read-only.
 
 ## Repository layout
 

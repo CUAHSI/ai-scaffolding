@@ -70,6 +70,45 @@ class ProjectManagementPackagingTests(unittest.TestCase):
                     pending.append(target)
         self.assertTrue(references, "Bundle the charter assets with the skill")
 
+    def test_publication_policy_records_branch_policy_and_access_evidence(self):
+        """Expose the configuration and evidence needed for safe publication."""
+        template = (SKILL_DIRECTORY / "assets" / "repository-policy-template.md").read_text()
+        for field in (
+            "Central repository:", "Responsible owner:", "Access administrator:",
+            "Tooling approval:", "Approved-charter branch: main",
+            "In-progress-charter branch: develop", "Staff roster reference:",
+            "Staff team(s):", "Organization base permission:",
+            "Outside collaborators:", "Organization owners:",
+            "Apps, deploy keys, and automation:", "Branch rules and merge policy:",
+            "| Check | Expected | Observed | Evidence and checked at | Result |",
+            "| Project/activity repository | Canonical charter URL | Link verification |",
+            "AI-drafted:", "Reviewed by:",
+        ):
+            with self.subTest(field=field):
+                self.assertIn(field, template)
+
+    def test_decision_assets_expose_attribution_source_and_review_fields(self):
+        """Keep decision evidence and human review visible in public templates."""
+        log = (SKILL_DIRECTORY / "assets" / "decision-log-template.md").read_text()
+        for field in (
+            "Accounting grant or activity code (canonical key):",
+            "Approved charter:", "## Entries", "Entry ID:", "Decision date:",
+            "Source transcript:", "Decision:", "Charter impact:",
+            "Supersedes:", "AI-drafted:", "Reviewed by:",
+        ):
+            with self.subTest(log_field=field):
+                self.assertIn(field, log)
+        pull_request = (SKILL_DIRECTORY / "assets" / "decision-pr-template.md").read_text()
+        for field in (
+            "Canonical key:", "Charter/version:", "PI/co-PI tags:",
+            "AI-drafted:", "Reviewed by:", "## Decisions and sources",
+            "## Charter impact", "## Checks",
+            "- [ ] Withheld items reviewed",
+            "- [ ] Existing decision-log entries are unchanged",
+        ):
+            with self.subTest(pr_field=field):
+                self.assertIn(field, pull_request)
+
     def test_charter_template_exposes_the_required_fixed_schema(self):
         """Keep the complete public charter schema available to the caller."""
         template = (SKILL_DIRECTORY / "assets" / "charter-template.md").read_text()
