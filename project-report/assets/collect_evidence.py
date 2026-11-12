@@ -443,6 +443,7 @@ def collect(reader, root_key, start, end, zone, retrieved_at=None, expected_labe
     failures = []
 
     def read_children(parent):
+        """Return direct children and any page failure for one parent."""
         try:
             return reader.children(parent), None
         except PartialRetrieval as error:
@@ -450,6 +451,7 @@ def collect(reader, root_key, start, end, zone, retrieved_at=None, expected_labe
                                    "reason": str(error)}
 
     def read_item(key, parent):
+        """Return one descendant record and its independent retrieval gaps."""
         gaps = []
         try:
             issue = reader.issue(key)
