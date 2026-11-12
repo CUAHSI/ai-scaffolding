@@ -24,6 +24,26 @@ with Path(os.environ["CALL_LOG"]).open("a") as log:
     log.write(json.dumps(args) + "\n")
 params = dict(arg.split("=", 1) for i, arg in enumerate(args) if i and args[i - 1] == "--data-urlencode")
 path = urlsplit(args[-1]).path
+if os.environ.get("REQUIRE_SIBLING_OVERLAP"):
+    from time import monotonic, sleep
+    sibling = None
+    for key in ("CAM-901", "CAM-902"):
+        if path.endswith(f"/issue/{key}"):
+            sibling = ("issue", key)
+        elif path.endswith("/search/jql") and params.get("jql") == f"parent = {key} ORDER BY key":
+            sibling = ("children", key)
+    if sibling:
+        phase, key = sibling
+        directory = Path(os.environ["CALL_LOG"]).parent
+        (directory / f"{phase}-{key}").touch()
+        other = "CAM-902" if key == "CAM-901" else "CAM-901"
+        peer = directory / f"{phase}-{other}"
+        deadline = monotonic() + 5
+        while not peer.exists() and monotonic() < deadline:
+            sleep(0.01)
+        if not peer.exists():
+            print(f"{phase} {key} did not overlap sibling", file=sys.stderr)
+            sys.exit(22)
 if path.endswith("/myself"):
     result = {"timeZone": "America/New_York"}
 elif path.endswith("/search/jql"):
@@ -165,6 +185,18 @@ class CollectorCLITests(unittest.TestCase):
         self.assertFalse(any("CAM-999" in str(call) for call in calls))
         self.assertTrue(any("nextPageToken=next" in call for call in calls))
         self.assertTrue(any("startAt=1" in call for call in calls))
+
+    def test_sibling_issue_and_child_search_gets_overlap_without_changing_evidence(self):
+        self.env["REQUIRE_SIBLING_OVERLAP"] = "1"
+        result = self.run_collector()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        evidence = json.loads(result.stdout)
+        self.assertEqual([item["issue"]["key"] for item in evidence["items"]],
+                         ["CAM-901", "CAM-902", "CAM-903"])
+        self.assertFalse(evidence["partial"], evidence["failures"])
+        for phase in ("issue", "children"):
+            for key in ("CAM-901", "CAM-902"):
+                self.assertTrue((self.directory / f"{phase}-{key}").exists())
 
     def test_label_selects_matching_research_project_and_retains_explicit_root_mode(self):
         labeled = self.run_collector("2026-03-07", "2026-03-08", "--project-label", "--project", "CAM",

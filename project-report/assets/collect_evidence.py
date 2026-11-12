@@ -13,6 +13,7 @@ import stat
 import subprocess
 import sys
 from collections import deque
+from concurrent.futures import ThreadPoolExecutor
 from datetime import date, datetime, time, timedelta, timezone
 from pathlib import Path
 from urllib.parse import quote
@@ -440,65 +441,83 @@ def collect(reader, root_key, start, end, zone, retrieved_at=None, expected_labe
     seen = {root_key}
     items = []
     failures = []
-    while queue:
-        parent = queue.popleft()
+
+    def read_children(parent):
         try:
-            child_keys = reader.children(parent)
+            return reader.children(parent), None
         except PartialRetrieval as error:
-            child_keys = error.records
-            failures.append({"key": parent, "endpoint": "children", "page": error.page,
-                             "reason": str(error)})
-        for key in child_keys:
-            if key in seen:
-                failures.append({"key": key, "endpoint": "children", "page": None,
-                                 "reason": f"Duplicate or cyclic descendant beneath {parent}"})
-                continue
-            seen.add(key)
+            return error.records, {"key": parent, "endpoint": "children", "page": error.page,
+                                   "reason": str(error)}
+
+    def read_item(key, parent):
+        gaps = []
+        try:
+            issue = reader.issue(key)
+        except RuntimeError as error:
+            return None, [{"key": key, "endpoint": "issue", "page": None,
+                           "reason": str(error) + "; descendants cannot be discovered"}]
+        if issue.get("key") != key or not isinstance(issue.get("fields"), dict):
+            return None, [{"key": key, "endpoint": "issue", "page": None,
+                           "reason": "Issue identity or fields unavailable; descendants cannot be discovered"}]
+        if (issue["fields"].get("parent") or {}).get("key") != parent:
+            return None, [{"key": key, "endpoint": "issue", "field": "parent", "page": None,
+                           "reason": f"Parent differs from search result ({parent}); scope is uncertain"}]
+        for field in REQUESTED_FIELDS:
+            if field not in issue["fields"]:
+                gaps.append({"key": key, "endpoint": "issue", "field": field, "page": None,
+                             "reason": "Requested field not returned; historical value unknown"})
+        record = {"issue": issue}
+        for kind, name in (("comment", "comments"), ("changelog", "changelog")):
             try:
-                issue = reader.issue(key)
-            except RuntimeError as error:
-                failures.append({"key": key, "endpoint": "issue", "page": None,
-                                 "reason": str(error) + "; descendants cannot be discovered"})
-                continue
-            if issue.get("key") != key or not isinstance(issue.get("fields"), dict):
-                failures.append({"key": key, "endpoint": "issue", "page": None,
-                                 "reason": "Issue identity or fields unavailable; descendants cannot be discovered"})
-                continue
-            if (issue["fields"].get("parent") or {}).get("key") != parent:
-                failures.append({"key": key, "endpoint": "issue", "field": "parent", "page": None,
-                                 "reason": f"Parent differs from search result ({parent}); scope is uncertain"})
-                continue
-            for field in REQUESTED_FIELDS:
-                if field not in issue["fields"]:
-                    failures.append({"key": key, "endpoint": "issue", "field": field, "page": None,
-                                     "reason": "Requested field not returned; historical value unknown"})
-            record = {"issue": issue}
-            for kind, name in (("comment", "comments"), ("changelog", "changelog")):
-                try:
-                    record[name] = reader.pages(key, kind)
-                    record[f"{name}_complete"] = True
-                except PartialRetrieval as error:
-                    record[name] = error.records
-                    record[f"{name}_complete"] = False
-                    failures.append({"key": key, "endpoint": kind, "page": error.page,
-                                     "reason": str(error)})
-            valid_comments = []
-            excluded_comments = []
-            for comment in record["comments"]:
-                created = comment.get("created") if isinstance(comment, dict) else None
-                updated = comment.get("updated") if isinstance(comment, dict) else None
-                if recorded_before_cutoff(created, cutoff) and recorded_before_cutoff(updated, cutoff):
-                    valid_comments.append(comment)
+                record[name] = reader.pages(key, kind)
+                record[f"{name}_complete"] = True
+            except PartialRetrieval as error:
+                record[name] = error.records
+                record[f"{name}_complete"] = False
+                gaps.append({"key": key, "endpoint": kind, "page": error.page,
+                             "reason": str(error)})
+        valid_comments = []
+        excluded_comments = []
+        for comment in record["comments"]:
+            created = comment.get("created") if isinstance(comment, dict) else None
+            updated = comment.get("updated") if isinstance(comment, dict) else None
+            if recorded_before_cutoff(created, cutoff) and recorded_before_cutoff(updated, cutoff):
+                valid_comments.append(comment)
+            else:
+                reason = ("creation time unavailable or after cutoff"
+                          if not recorded_before_cutoff(created, cutoff)
+                          else "edit time unavailable or after cutoff; earlier text cannot be verified")
+                excluded_comments.append({"id": comment.get("id") if isinstance(comment, dict) else None,
+                                          "created": created, "updated": updated, "reason": reason})
+        record["comments"] = valid_comments
+        record["excluded_comments"] = excluded_comments
+        return record, gaps
+
+    with ThreadPoolExecutor(max_workers=6) as executor:
+        while queue:
+            level = list(queue)
+            queue.clear()
+            child_results = executor.map(read_children, level)
+            work = []
+            for parent, (child_keys, gap) in zip(level, child_results):
+                if gap:
+                    work.append((None, gap))
+                for key in child_keys:
+                    if key in seen:
+                        work.append((None, {"key": key, "endpoint": "children", "page": None,
+                                            "reason": f"Duplicate or cyclic descendant beneath {parent}"}))
+                        continue
+                    seen.add(key)
+                    work.append((executor.submit(read_item, key, parent), None))
+            for future, gap in work:
+                if gap:
+                    failures.append(gap)
                 else:
-                    reason = ("creation time unavailable or after cutoff"
-                              if not recorded_before_cutoff(created, cutoff)
-                              else "edit time unavailable or after cutoff; earlier text cannot be verified")
-                    excluded_comments.append({"id": comment.get("id") if isinstance(comment, dict) else None,
-                                              "created": created, "updated": updated, "reason": reason})
-            record["comments"] = valid_comments
-            record["excluded_comments"] = excluded_comments
-            items.append(record)
-            queue.append(key)
+                    record, item_gaps = future.result()
+                    failures.extend(item_gaps)
+                    if record is not None:
+                        items.append(record)
+                        queue.append(record["issue"]["key"])
 
     if failures and not has_cutoff_evidence(items, cutoff):
         raise RuntimeError("Descendant retrieval failed and no usable cutoff evidence was found: "
