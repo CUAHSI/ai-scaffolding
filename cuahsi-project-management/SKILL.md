@@ -1,18 +1,20 @@
 ---
 name: cuahsi-project-management
-description: "Run a CUAHSI project kickoff or approved re-plan and draft a Project Charter for PI sign-off."
+description: "Run a CUAHSI kickoff or re-plan, draft a Project Charter, and publish project information to a private staff repository."
 disable-model-invocation: true
 ---
 
 # CUAHSI project management
 
-Run a human-led kickoff and produce an approximately two-page Project Charter. Shared understanding takes priority at kickoff, quarterly re-plans, and major pivots; keep routine coordination lightweight. The accounting grant or activity code, not a slug, Jira key, or repository, is the canonical project identity.
+Run a human-led kickoff, produce an approximately two-page Project Charter, and explicitly publish it when requested. Shared understanding takes priority at kickoff, quarterly re-plans, and major pivots; keep routine coordination lightweight. The accounting grant or activity code, not a slug, Jira key, or repository, is the canonical project identity.
 
-This first slice implements **kickoff** and **revise** only. Central-repository publication, transcript processing, decision PRs, email sending, reporting, scheduling, and staff-site provisioning are later work. Explain that limit when asked for them rather than simulating success. The existing `project-report` skill remains Jira-only and read-only.
+This skill implements **kickoff**, **revise**, and **publish**. Publication includes approved charters on `main`, in-progress charters on `develop`, adjacent append-only logs, repository policy/access checks, and navigation links. Automated transcript processing and decision extraction, email sending, reporting, scheduling, exports, and staff-site provisioning remain later work; explain those limits rather than simulating success. The existing `project-report` skill remains Jira-only and read-only.
 
 ## 1. Establish the session
 
-Accept `/cuahsi-project-management kickoff` for a new charter or `/cuahsi-project-management revise` for an existing charter; equivalent natural-language requests are fine. Ask which workflow applies if unclear.
+Accept `/cuahsi-project-management kickoff` for a new charter, `/cuahsi-project-management revise` for changes to an existing charter, or `/cuahsi-project-management publish` for explicitly requested central-repository publication; equivalent natural-language requests are fine. Ask which workflow applies if unclear.
+
+For **publish**, read and execute [Publication](assets/publication.md) instead of the kickoff steps below. This covers repository setup/access checks, approved publication, and in-progress storage. An unchanged signed-off charter does not require another kickoff; requested charter changes still use the revision/sign-off rules. A plan-only request authorizes no live writes.
 
 Collect the project/activity title and type, lifecycle checkpoint, named PI or owning activity co-PI, accounting code, supplied source documents, meeting participants/absentees, and any existing charter. Sources may be supplied text or explicitly authorized documents; linked material that was not read remains an unverified reference. A local conversation and supplied documents suffice; external service credentials are not prerequisites.
 
@@ -58,10 +60,10 @@ Set `Signed off` only when an explicit approval statement or attributable approv
 
 Display the complete charter, approval status, remaining questions/next owners, and any absentee notice in chat. Save only when the user explicitly chooses a private destination outside the source checkout and installed skill; state whether privacy is user-confirmed rather than independently verified. Preserve existing files and approved versions: choose a new destination or ask instead of overwriting. If saving fails, display the charter, identify the failure, and say no file was saved.
 
-Do not create tickets, PRs, central repositories, or external messages as an implicit kickoff side effect. A request to publish belongs to the later publication workflow. For an approved charter revision, deliver the candidate and approval evidence alongside its baseline reference; preserve the baseline.
+Do not create tickets, PRs, central repositories, or external messages as an implicit kickoff side effect. An explicit request to publish follows [Publication](assets/publication.md); privacy, approval, and write-authorization gates still apply. For an approved charter revision, deliver the candidate and approval evidence alongside its baseline reference; preserve the baseline.
 
 **Done when:** the user has the full charter and an honest account of pending decisions, participation, sign-off, and any file delivery. Completion of drafting is not completion of human approvals.
 
 ## Verification
 
-Exercise [Charter scenarios](assets/charter-scenarios.md) at the invocation-to-charter seam with synthetic inputs. Packaging checks run with `python3 -m unittest discover -s tests -p test_project_management_packaging.py`; the isolated installation test uses the cached Skills CLI offline and explicitly skips if Node/npx or that cache is unavailable. Use `npx skills add . --list` from this source repository to verify discovery and populate the installer cache before retrying a skipped installation check. Scenario checks evaluate agent behavior; packaging checks alone do not prove that the workflow was followed.
+Exercise [Charter scenarios](assets/charter-scenarios.md) at the invocation-to-charter seam with synthetic inputs. Packaging checks run with `python3 -m unittest discover -s tests -p test_project_management_packaging.py`; the isolated installation test uses the cached Skills CLI offline and explicitly skips if Node/npx or that cache is unavailable. Use `npx skills add . --list` from this source repository to verify discovery and populate the installer cache before retrying a skipped installation check. For publication, exercise [Publication scenarios](assets/publication-scenarios.md) at the invocation-to-publication seam with synthetic observations and no live writes. Scenario checks evaluate agent behavior; packaging checks alone do not prove that the workflow was followed, and neither establishes live operational acceptance.
