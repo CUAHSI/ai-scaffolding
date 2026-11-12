@@ -7,6 +7,7 @@ Agent skills for setting up CUAHSI software projects for AI-assisted engineering
 | Skill | Summary |
 | --- | --- |
 | [`cuahsi-project-setup`](cuahsi-project-setup/SKILL.md) | One-time setup of a repo for the engineering skills, following CUAHSI project guidelines: GitHub for code and PRs, Jira for issues. It first checks that `gh`, `acli`, the Jira `netrc` credentials, and `setup-matt-pocock-skills` are ready. It then collects the project's Jira Objective, project labels, and base branch, runs `setup-matt-pocock-skills` with Jira as the issue tracker, and adds a PR template that links each PR to its Story. You must invoke it by name, since the agent won't trigger it automatically. |
+| [`cuahsi-project-management`](cuahsi-project-management/SKILL.md) | Explicitly user-invoked kickoff and Project Charter drafting or revision for funded projects and Core Award Activities. Produces a roughly two-page charter in chat, keeps missing information explicit, and reserves sign-off for the PI or owning activity co-PI. |
 | [`project-report`](project-report/SKILL.md) | Manually invoked, read-only historical Jira reporting for an explicit Research Project, Objective, or Epic, or a label selecting all matching Research Projects, and an inclusive date range. Produces cited Markdown under `reports/` and displays it in chat; accepts a timezone, people filter, format, and destination override. |
 
 ### Supporting assets
@@ -147,6 +148,7 @@ npx skills add mattpocock/skills
 
 ```sh
 npx skills add CUAHSI/ai-scaffolding --skill cuahsi-project-setup
+npx skills add CUAHSI/ai-scaffolding --skill cuahsi-project-management
 npx skills add CUAHSI/ai-scaffolding --skill project-report
 ```
 
@@ -175,6 +177,23 @@ Once setup is done, the engineering skills follow CUAHSI conventions:
 - Asking to open a GitHub PR uses the repo's PR template, comments the PR link on the Story, and moves it to `In Review`.
 - Reporting that a PR was reviewed or merged moves the Story to `Done` and adds a Jira comment, shown in chat. A review alone triggers this even if the PR has not been merged.
 - These workflow actions need no separate approval; missing or ambiguous information and failed actions are reported.
+
+### Project kickoff and charter revision
+
+`cuahsi-project-management` ships in the top-level `cuahsi-project-management/` directory, alongside `cuahsi-project-setup`. It runs only when explicitly invoked (`disable-model-invocation: true`).
+
+**Prerequisites:** a compatible agent and the installed skill. Inputs can come from supplied documents and conversation; this local workflow needs no GitHub, Jira, SharePoint, or email credentials, and does not require project setup or external provisioning.
+
+```text
+/cuahsi-project-management kickoff using the supplied proposal and our conversation; draft the charter in chat.
+/cuahsi-project-management revise the supplied charter through an explicit Wayfinder session; preserve the original.
+```
+
+Charter revisions require an explicit grilling or Wayfinder session, not silent updates from ordinary conversation. The output is a roughly two-page Project Charter in chat using the full fixed [charter schema](cuahsi-project-management/assets/charter-template.md): identity, purpose and research question, objectives as written and interpreted, deliverables with owners, dates, and rough sizes, key dates, team and roles, out of scope, risks and assumptions, source documents, and sign-off. Retain all fields, including AI-draft and review metadata, and mark missing information as `pending` rather than inventing it. Sign-off remains pending until explicitly given by the named PI or, for a Core Award Activity, its owning co-PI. Any optional work breakdown is separate from the charter.
+
+**Output and safety limits:** keep the charter in chat unless the user explicitly chooses a private destination outside both the source checkout and the installed skill. Preserve source documents and prior charter versions; do not overwrite originals. Link budget and HR materials rather than copying their contents into the charter.
+
+CAM-1633 covers kickoff and charter drafting/revision only. Central private repository publication, transcript processing, scheduling, reports, and a hosted site belong to future Stories and are not implemented here. The existing `project-report` skill remains unchanged, Jira-only, and read-only.
 
 ## Repository layout
 
