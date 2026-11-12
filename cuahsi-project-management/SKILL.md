@@ -64,4 +64,4 @@ Do not create tickets, PRs, central repositories, or external messages as an imp
 
 ## Verification
 
-Exercise [Charter scenarios](assets/charter-scenarios.md) at the invocation-to-charter seam with synthetic inputs. Packaging checks run with `python3 -m unittest discover -s tests -p test_project_management_packaging.py`; use `npx skills add . --list` from this source repository to verify installer discovery. Scenario checks evaluate agent behavior; packaging checks alone do not prove that the workflow was followed.
+Exercise [Charter scenarios](assets/charter-scenarios.md) at the invocation-to-charter seam with synthetic inputs. Packaging checks run with `python3 -m unittest discover -s tests -p test_project_management_packaging.py`; the isolated installation test uses the cached Skills CLI offline and explicitly skips if Node/npx or that cache is unavailable. Use `npx skills add . --list` from this source repository to verify discovery and populate the installer cache before retrying a skipped installation check. Scenario checks evaluate agent behavior; packaging checks alone do not prove that the workflow was followed.

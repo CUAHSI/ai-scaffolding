@@ -2,7 +2,7 @@
 
 These are synthetic invocation-to-charter checks, not real project evidence or operational approvals. Give a fresh agent the skill and the **Inputs** for one case, then inspect its output against the **Expected** result. Do not give the agent other projects as inferred context. Use chat-only output unless separately testing an explicitly chosen private temporary destination. No Jira, GitHub, SharePoint, recording, or email operations are needed.
 
-The automated packaging suite checks public metadata, reachable bundled references, and the fixed template schema. It does not execute an agent or prove workflow compliance. Record scenario outcomes separately after actually exercising them; a written scenario is not a passing test.
+The automated packaging suite checks selection and copying through the real Skills CLI, reachable bundled references, and the fixed template schema. It does not execute an agent or prove workflow compliance. Record scenario outcomes separately after actually exercising them; a written scenario is not a passing test.
 
 ## 1. New funded project
 
