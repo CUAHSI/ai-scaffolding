@@ -13,6 +13,7 @@ import stat
 import subprocess
 import sys
 from collections import deque
+from concurrent.futures import ThreadPoolExecutor
 from datetime import date, datetime, time, timedelta, timezone
 from pathlib import Path
 from urllib.parse import quote
@@ -25,6 +26,10 @@ ISSUE_FIELDS = (
 )
 PAGE_SIZE = 100
 REQUESTED_FIELDS = ISSUE_FIELDS.split(",")
+
+
+class AmbiguousLabel(ValueError):
+    """Multiple spellings could represent the requested project label."""
 
 
 class PartialRetrieval(RuntimeError):
@@ -62,6 +67,30 @@ def recorded_before_cutoff(value, cutoff):
         return instant.tzinfo is not None and instant < cutoff
     except ValueError:
         return False
+
+
+def has_cutoff_evidence(items, cutoff):
+    """Check whether accessible descendants have pre-cutoff records.
+
+    Parameters
+    ----------
+    items : list[dict]
+        Descendant evidence records, with cutoff-valid comments.
+    cutoff : datetime
+        Exclusive reporting cutoff.
+
+    Returns
+    -------
+    bool
+        Whether a descendant existed or had usable evidence by cutoff.
+    """
+    return any(
+        recorded_before_cutoff(record["issue"]["fields"].get("created"), cutoff)
+        or bool(record["comments"])
+        or any(recorded_before_cutoff(change.get("created"), cutoff)
+               for change in record["changelog"])
+        for record in items
+    )
 
 
 def parse_date(value):
@@ -150,20 +179,118 @@ class JiraReader:
             raise RuntimeError(f"GET {path} returned a non-object response")
         return response
 
-    def issue(self, key):
+    def issue(self, key, include_labels=False):
         """Fetch the fields needed to assess one Jira work item.
 
         Parameters
         ----------
         key : str
             Jira issue key.
+        include_labels : bool, optional
+            Include current labels when validating a label-selected root.
 
         Returns
         -------
         dict
             Issue response, including its requested fields.
         """
-        return self.get(f"issue/{quote(key, safe='')}", fields=ISSUE_FIELDS)
+        fields = ISSUE_FIELDS + ",labels" if include_labels else ISSUE_FIELDS
+        return self.get(f"issue/{quote(key, safe='')}", fields=fields)
+
+    def projects(self, label, project, allowed_roots=None):
+        """Find accessible Research Projects carrying the requested label.
+
+        Parameters
+        ----------
+        label : str
+            User-specified Jira label.
+        project : str or None
+            Permitted Jira project key, or None for an unscoped search.
+        allowed_roots : list[str], optional
+            Allowed Research Project keys for narrower read access.
+
+        Returns
+        -------
+        tuple[list[dict], str]
+            Matched Research Projects and their resolved label spelling.
+
+        Raises
+        ------
+        PartialRetrieval
+            If a search page fails, with earlier pages retained.
+        ValueError
+            If the selector is invalid, unmatched, or ambiguous.
+        """
+        if not isinstance(label, str) or not label.strip():
+            raise ValueError("Specify a non-empty Research Project label")
+        if project is not None and not re.fullmatch(r"[A-Z][A-Z0-9_]*", project):
+            raise ValueError("--project must be a Jira project key")
+        if allowed_roots and not all(re.fullmatch(r"[A-Z][A-Z0-9_]*-\d+", key) for key in allowed_roots):
+            raise ValueError("--allowed-project-root requires Jira issue keys")
+        escaped = label.strip().replace("\\", "\\\\").replace('"', '\\"')
+        scope = f"project = {project} AND " if project else ""
+        allowed = f" AND key in ({', '.join(allowed_roots)})" if allowed_roots else ""
+        jql = (f'{scope}issuetype = "Research Project" '
+               f'AND labels = "{escaped}"{allowed} ORDER BY key')
+        token = None
+        seen_tokens = set()
+        projects = []
+        page_number = 1
+        while True:
+            params = {"jql": jql, "fields": "key,summary,labels,issuetype", "maxResults": PAGE_SIZE}
+            if token is not None:
+                params["nextPageToken"] = token
+            try:
+                page = self.get("search/jql", **params)
+                if not isinstance(page.get("issues"), list) or not isinstance(page.get("isLast"), bool):
+                    raise RuntimeError("Research Project label search returned an incomplete page")
+                projects.extend(page["issues"])
+                if page["isLast"]:
+                    break
+                next_token = page.get("nextPageToken")
+                if not isinstance(next_token, str) or not next_token or next_token in seen_tokens:
+                    raise RuntimeError("Research Project label search has no usable nextPageToken")
+            except RuntimeError as error:
+                raise PartialRetrieval(str(error), projects, page_number) from error
+            token = next_token
+            seen_tokens.add(token)
+            page_number += 1
+        return self.resolve_projects(projects, label, project)
+
+    @staticmethod
+    def resolve_projects(projects, label, project):
+        """Resolve exact label spelling from accessible search records.
+
+        Parameters
+        ----------
+        projects : list[dict]
+            Current Jira search records.
+        label : str
+            Label spelling requested by the user.
+        project : str or None
+            Project key used to qualify a no-match explanation.
+
+        Returns
+        -------
+        tuple[list[dict], str]
+            Exact-label Research Projects and their label spelling.
+
+        Raises
+        ------
+        ValueError
+            If no Research Project matches or spelling is ambiguous.
+        """
+        matches = [issue for issue in projects
+                   if issue.get("fields", {}).get("issuetype", {}).get("name") == "Research Project"
+                   and any(name.casefold() == label.strip().casefold()
+                           for name in issue.get("fields", {}).get("labels", []))]
+        if not matches:
+            raise ValueError(f"No Research Projects match label {label!r} in {project or 'the accessible scope'}; confirm the label")
+        names = {name for issue in matches for name in issue["fields"]["labels"]
+                 if name.casefold() == label.strip().casefold()}
+        if len(names) != 1:
+            raise AmbiguousLabel(f"Ambiguous Research Project label {label!r}: {', '.join(sorted(names))}; clarify")
+        return matches, names.pop()
 
     def children(self, key):
         """Find every current direct child of an issue across search pages.
@@ -254,7 +381,7 @@ class JiraReader:
             page_number += 1
 
 
-def collect(reader, root_key, start, end, zone):
+def collect(reader, root_key, start, end, zone, retrieved_at=None, expected_label=None):
     """Collect a dated evidence bundle for every current descendant.
 
     The bundle retains raw Jira records for the reporting agent to assess;
@@ -272,6 +399,10 @@ def collect(reader, root_key, start, end, zone):
         Last included local calendar day.
     zone : ZoneInfo
         IANA reporting timezone used for calendar boundaries.
+    retrieved_at : datetime, optional
+        Common retrieval instant shared by label-selected roots.
+    expected_label : str, optional
+        Current label required on a label-selected Research Project.
 
     Returns
     -------
@@ -285,7 +416,7 @@ def collect(reader, root_key, start, end, zone):
     RuntimeError
         If the root or all descendants are inaccessible after a retrieval failure.
     """
-    retrieved_at = datetime.now(timezone.utc)
+    retrieved_at = retrieved_at or datetime.now(timezone.utc)
     today = retrieved_at.astimezone(zone).date()
     if start > end:
         raise ValueError("Reporting start date is after end date")
@@ -296,83 +427,101 @@ def collect(reader, root_key, start, end, zone):
     provisional = end == today
     cutoff = retrieved_at if provisional else end_exclusive_utc
 
-    root = reader.issue(root_key)
+    root = reader.issue(root_key, include_labels=bool(expected_label))
     if root.get("key") != root_key or not isinstance(root.get("fields"), dict):
         raise RuntimeError(f"Reporting root {root_key} is inaccessible or incomplete")
     if (root["fields"].get("issuetype") or {}).get("name") not in {"Research Project", "Objective", "Epic"}:
         raise ValueError("Reporting root must be a Research Project, Objective, or Epic")
+    if expected_label and (root["fields"]["issuetype"]["name"] != "Research Project"
+                           or not any(isinstance(name, str) and name.casefold() == expected_label.casefold()
+                                      for name in root["fields"].get("labels") or [])):
+        raise RuntimeError(f"Research Project {root_key} no longer carries label {expected_label!r}")
 
     queue = deque([root_key])
     seen = {root_key}
     items = []
     failures = []
-    while queue:
-        parent = queue.popleft()
-        try:
-            child_keys = reader.children(parent)
-        except PartialRetrieval as error:
-            child_keys = error.records
-            failures.append({"key": parent, "endpoint": "children", "page": error.page,
-                             "reason": str(error)})
-        for key in child_keys:
-            if key in seen:
-                failures.append({"key": key, "endpoint": "children", "page": None,
-                                 "reason": f"Duplicate or cyclic descendant beneath {parent}"})
-                continue
-            seen.add(key)
-            try:
-                issue = reader.issue(key)
-            except RuntimeError as error:
-                failures.append({"key": key, "endpoint": "issue", "page": None,
-                                 "reason": str(error) + "; descendants cannot be discovered"})
-                continue
-            if issue.get("key") != key or not isinstance(issue.get("fields"), dict):
-                failures.append({"key": key, "endpoint": "issue", "page": None,
-                                 "reason": "Issue identity or fields unavailable; descendants cannot be discovered"})
-                continue
-            if (issue["fields"].get("parent") or {}).get("key") != parent:
-                failures.append({"key": key, "endpoint": "issue", "field": "parent", "page": None,
-                                 "reason": f"Parent differs from search result ({parent}); scope is uncertain"})
-                continue
-            for field in REQUESTED_FIELDS:
-                if field not in issue["fields"]:
-                    failures.append({"key": key, "endpoint": "issue", "field": field, "page": None,
-                                     "reason": "Requested field not returned; historical value unknown"})
-            record = {"issue": issue}
-            for kind, name in (("comment", "comments"), ("changelog", "changelog")):
-                try:
-                    record[name] = reader.pages(key, kind)
-                    record[f"{name}_complete"] = True
-                except PartialRetrieval as error:
-                    record[name] = error.records
-                    record[f"{name}_complete"] = False
-                    failures.append({"key": key, "endpoint": kind, "page": error.page,
-                                     "reason": str(error)})
-            valid_comments = []
-            excluded_comments = []
-            for comment in record["comments"]:
-                created = comment.get("created") if isinstance(comment, dict) else None
-                updated = comment.get("updated") if isinstance(comment, dict) else None
-                if recorded_before_cutoff(created, cutoff) and recorded_before_cutoff(updated, cutoff):
-                    valid_comments.append(comment)
-                else:
-                    reason = ("creation time unavailable or after cutoff"
-                              if not recorded_before_cutoff(created, cutoff)
-                              else "edit time unavailable or after cutoff; earlier text cannot be verified")
-                    excluded_comments.append({"id": comment.get("id") if isinstance(comment, dict) else None,
-                                              "created": created, "updated": updated, "reason": reason})
-            record["comments"] = valid_comments
-            record["excluded_comments"] = excluded_comments
-            items.append(record)
-            queue.append(key)
 
-    if failures and not any(
-        recorded_before_cutoff(record["issue"]["fields"].get("created"), cutoff)
-        or bool(record["comments"])
-        or any(recorded_before_cutoff(change.get("created"), cutoff)
-               for change in record["changelog"])
-        for record in items
-    ):
+    def read_children(parent):
+        """Return direct children and any page failure for one parent."""
+        try:
+            return reader.children(parent), None
+        except PartialRetrieval as error:
+            return error.records, {"key": parent, "endpoint": "children", "page": error.page,
+                                   "reason": str(error)}
+
+    def read_item(key, parent):
+        """Return one descendant record and its independent retrieval gaps."""
+        gaps = []
+        try:
+            issue = reader.issue(key)
+        except RuntimeError as error:
+            return None, [{"key": key, "endpoint": "issue", "page": None,
+                           "reason": str(error) + "; descendants cannot be discovered"}]
+        if issue.get("key") != key or not isinstance(issue.get("fields"), dict):
+            return None, [{"key": key, "endpoint": "issue", "page": None,
+                           "reason": "Issue identity or fields unavailable; descendants cannot be discovered"}]
+        if (issue["fields"].get("parent") or {}).get("key") != parent:
+            return None, [{"key": key, "endpoint": "issue", "field": "parent", "page": None,
+                           "reason": f"Parent differs from search result ({parent}); scope is uncertain"}]
+        for field in REQUESTED_FIELDS:
+            if field not in issue["fields"]:
+                gaps.append({"key": key, "endpoint": "issue", "field": field, "page": None,
+                             "reason": "Requested field not returned; historical value unknown"})
+        record = {"issue": issue}
+        for kind, name in (("comment", "comments"), ("changelog", "changelog")):
+            try:
+                record[name] = reader.pages(key, kind)
+                record[f"{name}_complete"] = True
+            except PartialRetrieval as error:
+                record[name] = error.records
+                record[f"{name}_complete"] = False
+                gaps.append({"key": key, "endpoint": kind, "page": error.page,
+                             "reason": str(error)})
+        valid_comments = []
+        excluded_comments = []
+        for comment in record["comments"]:
+            created = comment.get("created") if isinstance(comment, dict) else None
+            updated = comment.get("updated") if isinstance(comment, dict) else None
+            if recorded_before_cutoff(created, cutoff) and recorded_before_cutoff(updated, cutoff):
+                valid_comments.append(comment)
+            else:
+                reason = ("creation time unavailable or after cutoff"
+                          if not recorded_before_cutoff(created, cutoff)
+                          else "edit time unavailable or after cutoff; earlier text cannot be verified")
+                excluded_comments.append({"id": comment.get("id") if isinstance(comment, dict) else None,
+                                          "created": created, "updated": updated, "reason": reason})
+        record["comments"] = valid_comments
+        record["excluded_comments"] = excluded_comments
+        return record, gaps
+
+    with ThreadPoolExecutor(max_workers=6) as executor:
+        while queue:
+            level = list(queue)
+            queue.clear()
+            child_results = executor.map(read_children, level)
+            work = []
+            for parent, (child_keys, gap) in zip(level, child_results):
+                if gap:
+                    work.append((None, gap))
+                for key in child_keys:
+                    if key in seen:
+                        work.append((None, {"key": key, "endpoint": "children", "page": None,
+                                            "reason": f"Duplicate or cyclic descendant beneath {parent}"}))
+                        continue
+                    seen.add(key)
+                    work.append((executor.submit(read_item, key, parent), None))
+            for future, gap in work:
+                if gap:
+                    failures.append(gap)
+                else:
+                    record, item_gaps = future.result()
+                    failures.extend(item_gaps)
+                    if record is not None:
+                        items.append(record)
+                        queue.append(record["issue"]["key"])
+
+    if failures and not has_cutoff_evidence(items, cutoff):
         raise RuntimeError("Descendant retrieval failed and no usable cutoff evidence was found: "
                            + "; ".join(f"{gap['key']} {gap['endpoint']} page {gap['page']}: {gap['reason']}"
                                        for gap in failures))
@@ -396,6 +545,116 @@ def collect(reader, root_key, start, end, zone):
     }
 
 
+def collect_label(reader, label, project, start, end, zone, allowed_roots=None):
+    """Collect one dated bundle across matching Research Projects.
+
+    Parameters
+    ----------
+    reader : JiraReader
+        Authenticated GET-only Jira client.
+    label : str
+        Label selecting current Research Projects.
+    project : str or None
+        Permitted Jira project key, or None when unscoped.
+    start : date
+        First included local calendar day.
+    end : date
+        Last included local calendar day.
+    zone : ZoneInfo
+        Reporting timezone for the shared period and cutoff.
+    allowed_roots : list[str], optional
+        Research Project keys permitted by a narrower reporting boundary.
+
+    Returns
+    -------
+    dict
+        Label selector, matched and included roots, dated evidence and gaps.
+
+    Raises
+    ------
+    ValueError
+        If the label or reporting dates require clarification.
+    RuntimeError
+        If root discovery or accessible evidence cannot support a report.
+    """
+    search_gap = None
+    try:
+        projects, resolved_label = reader.projects(label, project, allowed_roots)
+    except PartialRetrieval as error:
+        search_gap = {"key": None, "endpoint": "projects", "page": error.page,
+                      "reason": str(error)}
+        if not error.records:
+            raise RuntimeError(f"Project label search failed at page {error.page}: {error}") from error
+        try:
+            projects, resolved_label = reader.resolve_projects(error.records, label, project)
+        except AmbiguousLabel:
+            raise
+        except ValueError as no_match:
+            raise RuntimeError(f"Project label search incomplete at page {error.page}; "
+                               "no usable Research Project match found") from no_match
+    if allowed_roots:
+        projects = [issue for issue in projects if issue.get("key") in allowed_roots]
+        if not projects:
+            if search_gap:
+                raise RuntimeError(f"Project label search incomplete at page {search_gap['page']}; "
+                                   "no permitted match in accessible pages")
+            raise ValueError("No matching Research Projects within permitted reporting roots; clarify the label or scope")
+    unique_projects = []
+    duplicates = []
+    seen_keys = set()
+    for issue in projects:
+        key = issue.get("key")
+        if not isinstance(key, str):
+            duplicates.append({"key": None, "endpoint": "projects", "page": None,
+                               "reason": "Project search returned an invalid key"})
+        elif key in seen_keys:
+            duplicates.append({"key": key, "endpoint": "projects", "page": None,
+                               "reason": "Duplicate Research Project across search pages; membership uncertain"})
+        else:
+            seen_keys.add(key)
+            unique_projects.append(issue)
+    projects = unique_projects
+    retrieved_at = datetime.now(timezone.utc)
+    if start > end or end > retrieved_at.astimezone(zone).date():
+        raise ValueError("Label report requires a non-reversed historical date range")
+    bundles = []
+    failures = ([search_gap] if search_gap else []) + duplicates
+    for issue in projects:
+        try:
+            bundles.append((issue, collect(reader, issue["key"], start, end, zone, retrieved_at,
+                                           expected_label=resolved_label)))
+        except (RuntimeError, ValueError) as error:
+            failures.append({"key": issue["key"], "endpoint": "root", "page": None,
+                             "reason": f"Research Project inaccessible or insufficient evidence: {error}"})
+    if not bundles:
+        raise RuntimeError("No accessible Research Project has usable cutoff evidence: "
+                           + "; ".join(f"{gap['key']}: {gap['reason']}" for gap in failures))
+    result = dict(bundles[0][1])
+    result["roots"] = []
+    result["items"] = []
+    result["failures"] = failures
+    for issue, bundle in bundles:
+        result["roots"].append(bundle["root"])
+        for item in bundle["items"]:
+            item["reporting_root"] = issue["key"]
+            result["items"].append(item)
+        result["failures"].extend(bundle["failures"])
+    result.pop("root")
+    result["partial"] = bool(result["failures"])
+    cutoff = datetime.fromisoformat(result["period"]["cutoff_utc"].replace("Z", "+00:00"))
+    if result["partial"] and not has_cutoff_evidence(result["items"], cutoff):
+        raise RuntimeError("Label retrieval failed and no usable cutoff evidence was found: "
+                           + "; ".join(f"{gap['key']} {gap['endpoint']} page {gap['page']}: {gap['reason']}"
+                                       for gap in result["failures"]))
+    result["project_label"] = resolved_label
+    result["matched_projects"] = [{"key": issue["key"], "summary": issue["fields"]["summary"]}
+                                  for issue in projects]
+    result["coverage"] += " Current label membership is not necessarily a historical snapshot at the cutoff."
+    if search_gap:
+        result["coverage"] += " Unseen matching Research Projects may be absent after the failed search page."
+    return result
+
+
 def main():
     """Parse CLI inputs and print a complete read-only Jira evidence bundle.
 
@@ -405,10 +664,13 @@ def main():
         Exit status: zero on success, one on a collection error.
     """
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("root", help="Jira key of the reporting root")
+    parser.add_argument("root", help="Jira root key (or label with --project-label)")
     parser.add_argument("start", help="inclusive local YYYY-MM-DD")
     parser.add_argument("end", help="inclusive local YYYY-MM-DD")
     parser.add_argument("--site", required=True, help="Jira hostname from the invoking project's guidance")
+    parser.add_argument("--project-label", action="store_true", help="interpret root argument as a Research Project label")
+    parser.add_argument("--project", help="permitted Jira project key for label search")
+    parser.add_argument("--allowed-project-root", action="append", help="restrict label search to a permitted Research Project key (repeatable)")
     parser.add_argument("--timezone", help="IANA timezone (defaults to the authenticated Jira user's timezone)")
     parser.add_argument("--netrc-file", type=Path, default=Path.home() / ".jira/netrc")
     args = parser.parse_args()
@@ -419,7 +681,12 @@ def main():
         if not zone_name:
             raise ValueError("Jira has no reporting timezone; specify --timezone")
         zone = ZoneInfo(zone_name)
-        result = collect(reader, args.root, start, end, zone)
+        if args.project_label:
+            result = collect_label(reader, args.root, args.project, start, end, zone, args.allowed_project_root)
+        else:
+            if args.project or args.allowed_project_root:
+                raise ValueError("--project and --allowed-project-root require --project-label")
+            result = collect(reader, args.root, start, end, zone)
     except (OSError, ValueError, ZoneInfoNotFoundError, RuntimeError, KeyError) as error:
         print(f"Evidence collection failed: {error}", file=sys.stderr)
         return 1

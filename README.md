@@ -7,7 +7,7 @@ Agent skills for setting up CUAHSI software projects for AI-assisted engineering
 | Skill | Summary |
 | --- | --- |
 | [`cuahsi-project-setup`](cuahsi-project-setup/SKILL.md) | One-time setup of a repo for the engineering skills, following CUAHSI project guidelines: GitHub for code and PRs, Jira for issues. It first checks that `gh`, `acli`, the Jira `netrc` credentials, and `setup-matt-pocock-skills` are ready. It then collects the project's Jira Objective, project labels, and base branch, runs `setup-matt-pocock-skills` with Jira as the issue tracker, and adds a PR template that links each PR to its Story. You must invoke it by name, since the agent won't trigger it automatically. |
-| [`project-report`](project-report/SKILL.md) | Manually invoked, read-only Jira reporting for a Research Project, Objective, or Epic and an inclusive date range. Produces a cited historical Markdown report under `reports/` and displays it in chat; accepts a timezone, people filter, format, and destination override. |
+| [`project-report`](project-report/SKILL.md) | Manually invoked, read-only historical Jira reporting for an explicit Research Project, Objective, or Epic, or a label selecting all matching Research Projects, and an inclusive date range. Produces cited Markdown under `reports/` and displays it in chat; accepts a timezone, people filter, format, and destination override. |
 
 ### Supporting assets
 
