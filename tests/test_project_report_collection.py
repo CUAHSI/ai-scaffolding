@@ -96,9 +96,13 @@ elif "/issue/" in path:
                 entry["updated"] = "2026-03-10T12:00:00.000+0000"
         result = {item_key: [dict(entry, id=str(100 + start))] if start < 2 else [], "startAt": start, "maxResults": 100, "total": 2}
     else:
+        issue_types = {"CAM-800": "Research Project", "CAM-810": "Research Project", "HYDRO-20": "Research Project",
+                       "CAM-900": "Epic", "CAM-903": "Sub-task", "CAM-812": "Sub-task"}
+        parents = {"CAM-801": "CAM-800", "HYDRO-21": "HYDRO-20", "CAM-811": "CAM-810",
+                   "CAM-812": "CAM-811", "CAM-903": "CAM-901"}
         fields = {"summary": "HydroFabric project" if key == "CAM-800" else key,
-                  "issuetype": {"name": "Research Project" if key in ("CAM-800", "CAM-810", "HYDRO-20") else "Epic" if key == "CAM-900" else "Sub-task" if key in ("CAM-903", "CAM-812") else "Story"},
-                  "parent": None if key in ("CAM-800", "CAM-810", "CAM-900", "HYDRO-20") else {"key": "CAM-800" if key == "CAM-801" else "HYDRO-20" if key == "HYDRO-21" else "CAM-810" if key == "CAM-811" else "CAM-811" if key == "CAM-812" else "CAM-901" if key == "CAM-903" else "CAM-900"},
+                  "issuetype": {"name": issue_types.get(key, "Story")},
+                  "parent": {"key": parents.get(key, "CAM-900")} if key not in ("CAM-800", "CAM-810", "CAM-900", "HYDRO-20") else None,
                   "created": "2026-03-01T10:00:00.000+0000", "status": {"name": "Done"}, "resolution": None,
                                     "resolutiondate": None, "assignee": None, "duedate": None, "customfield_10504": None,
                                     "description": None, "updated": "2026-03-08T12:00:00.000+0000",
@@ -112,6 +116,8 @@ elif "/issue/" in path:
             fields["parent"] = {"key": "CAM-999"}
         if key == os.environ.get("ROOT_LABEL_REMOVED"):
             fields["labels"] = []
+        if "labels" not in params.get("fields", "").split(","):
+            fields.pop("labels", None)
         result = {"key": key, "fields": fields}
 else:
     sys.exit(7)
@@ -176,7 +182,10 @@ class CollectorCLITests(unittest.TestCase):
         self.assertEqual(len(label_queries), 1)
         self.assertIn('project = CAM', label_queries[0])
         self.assertIn('issuetype = "Research Project"', label_queries[0])
-        self.assertEqual(self.run_collector().returncode, 0)
+        explicit = self.run_collector()
+        self.assertEqual(explicit.returncode, 0)
+        self.assertNotIn("labels", json.loads(explicit.stdout)["root"]["fields"])
+        self.assertNotIn("labels", json.loads(explicit.stdout)["items"][0]["issue"]["fields"])
 
     def test_label_collects_all_project_search_pages_and_nested_descendants(self):
         self.env["LABEL_TWO_PROJECTS"] = "1"
@@ -297,6 +306,31 @@ class CollectorCLITests(unittest.TestCase):
         self.assertNotEqual(labeled.returncode, 0)
         self.assertFalse(labeled.stdout)
         self.assertIn("Ambiguous Research Project label", labeled.stderr)
+
+    def test_label_scope_limits_collection_to_permitted_research_project_roots(self):
+        self.env["LABEL_TWO_PROJECTS"] = "1"
+        labeled = self.run_collector("2026-03-07", "2026-03-08", "--project-label", "--project", "CAM",
+                                     "--allowed-project-root", "CAM-800", selector="HydroFabric")
+        self.assertEqual(labeled.returncode, 0, labeled.stderr)
+        bundle = json.loads(labeled.stdout)
+        self.assertEqual([root["key"] for root in bundle["roots"]], ["CAM-800"])
+        self.assertEqual([project["key"] for project in bundle["matched_projects"]], ["CAM-800"])
+        calls = [json.loads(line) for line in self.log.read_text().splitlines()]
+        self.assertFalse(any("/issue/CAM-810" in str(call) for call in calls))
+        outside = self.run_collector("2026-03-07", "2026-03-08", "--project-label", "--project", "CAM",
+                                     "--allowed-project-root", "CAM-999", selector="HydroFabric")
+        self.assertNotEqual(outside.returncode, 0)
+        self.assertFalse(outside.stdout)
+        self.assertIn("permitted", outside.stderr)
+
+    def test_incomplete_allowed_root_search_is_not_a_definitive_no_match(self):
+        self.env.update(LABEL_TWO_PROJECTS="1", FAIL_LABEL_SEARCH_PAGE="2")
+        labeled = self.run_collector("2026-03-07", "2026-03-08", "--project-label", "--project", "CAM",
+                                     "--allowed-project-root", "CAM-810", selector="HydroFabric")
+        self.assertNotEqual(labeled.returncode, 0)
+        self.assertFalse(labeled.stdout)
+        self.assertIn("incomplete", labeled.stderr.lower())
+        self.assertNotIn("No matching Research Projects within permitted", labeled.stderr)
 
     def test_calendar_boundaries_use_timezone_offsets_not_fixed_utc_days(self):
         result = self.run_collector("2026-03-07", "2026-03-08", "--timezone", "America/New_York")

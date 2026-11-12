@@ -21,10 +21,10 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 ISSUE_FIELDS = (
     "summary,issuetype,parent,created,status,resolution,resolutiondate,assignee,"
-    "duedate,customfield_10504,description,updated,labels"
+    "duedate,customfield_10504,description,updated"
 )
 PAGE_SIZE = 100
-REQUESTED_FIELDS = [field for field in ISSUE_FIELDS.split(",") if field != "labels"]
+REQUESTED_FIELDS = ISSUE_FIELDS.split(",")
 
 
 class AmbiguousLabel(ValueError):
@@ -69,7 +69,20 @@ def recorded_before_cutoff(value, cutoff):
 
 
 def has_cutoff_evidence(items, cutoff):
-    """Whether at least one descendant has a trustworthy pre-cutoff record."""
+    """Check whether accessible descendants have pre-cutoff records.
+
+    Parameters
+    ----------
+    items : list[dict]
+        Descendant evidence records, with cutoff-valid comments.
+    cutoff : datetime
+        Exclusive reporting cutoff.
+
+    Returns
+    -------
+    bool
+        Whether a descendant existed or had usable evidence by cutoff.
+    """
     return any(
         recorded_before_cutoff(record["issue"]["fields"].get("created"), cutoff)
         or bool(record["comments"])
@@ -165,31 +178,59 @@ class JiraReader:
             raise RuntimeError(f"GET {path} returned a non-object response")
         return response
 
-    def issue(self, key):
+    def issue(self, key, include_labels=False):
         """Fetch the fields needed to assess one Jira work item.
 
         Parameters
         ----------
         key : str
             Jira issue key.
+        include_labels : bool, optional
+            Include current labels when validating a label-selected root.
 
         Returns
         -------
         dict
             Issue response, including its requested fields.
         """
-        return self.get(f"issue/{quote(key, safe='')}", fields=ISSUE_FIELDS)
+        fields = ISSUE_FIELDS + ",labels" if include_labels else ISSUE_FIELDS
+        return self.get(f"issue/{quote(key, safe='')}", fields=fields)
 
-    def projects(self, label, project):
-        """Find Research Projects matching a label inside a permitted Jira project."""
+    def projects(self, label, project, allowed_roots=None):
+        """Find accessible Research Projects carrying the requested label.
+
+        Parameters
+        ----------
+        label : str
+            User-specified Jira label.
+        project : str or None
+            Permitted Jira project key, or None for an unscoped search.
+        allowed_roots : list[str], optional
+            Allowed Research Project keys for narrower read access.
+
+        Returns
+        -------
+        tuple[list[dict], str]
+            Matched Research Projects and their resolved label spelling.
+
+        Raises
+        ------
+        PartialRetrieval
+            If a search page fails, with earlier pages retained.
+        ValueError
+            If the selector is invalid, unmatched, or ambiguous.
+        """
         if not isinstance(label, str) or not label.strip():
             raise ValueError("Specify a non-empty Research Project label")
         if project is not None and not re.fullmatch(r"[A-Z][A-Z0-9_]*", project):
             raise ValueError("--project must be a Jira project key")
+        if allowed_roots and not all(re.fullmatch(r"[A-Z][A-Z0-9_]*-\d+", key) for key in allowed_roots):
+            raise ValueError("--allowed-project-root requires Jira issue keys")
         escaped = label.strip().replace("\\", "\\\\").replace('"', '\\"')
         scope = f"project = {project} AND " if project else ""
+        allowed = f" AND key in ({', '.join(allowed_roots)})" if allowed_roots else ""
         jql = (f'{scope}issuetype = "Research Project" '
-               f'AND labels = "{escaped}" ORDER BY key')
+               f'AND labels = "{escaped}"{allowed} ORDER BY key')
         token = None
         seen_tokens = set()
         projects = []
@@ -217,7 +258,27 @@ class JiraReader:
 
     @staticmethod
     def resolve_projects(projects, label, project):
-        """Resolve exact label spelling from an accessible Research Project search."""
+        """Resolve exact label spelling from accessible search records.
+
+        Parameters
+        ----------
+        projects : list[dict]
+            Current Jira search records.
+        label : str
+            Label spelling requested by the user.
+        project : str or None
+            Project key used to qualify a no-match explanation.
+
+        Returns
+        -------
+        tuple[list[dict], str]
+            Exact-label Research Projects and their label spelling.
+
+        Raises
+        ------
+        ValueError
+            If no Research Project matches or spelling is ambiguous.
+        """
         matches = [issue for issue in projects
                    if issue.get("fields", {}).get("issuetype", {}).get("name") == "Research Project"
                    and any(name.casefold() == label.strip().casefold()
@@ -337,6 +398,10 @@ def collect(reader, root_key, start, end, zone, retrieved_at=None, expected_labe
         Last included local calendar day.
     zone : ZoneInfo
         IANA reporting timezone used for calendar boundaries.
+    retrieved_at : datetime, optional
+        Common retrieval instant shared by label-selected roots.
+    expected_label : str, optional
+        Current label required on a label-selected Research Project.
 
     Returns
     -------
@@ -361,7 +426,7 @@ def collect(reader, root_key, start, end, zone, retrieved_at=None, expected_labe
     provisional = end == today
     cutoff = retrieved_at if provisional else end_exclusive_utc
 
-    root = reader.issue(root_key)
+    root = reader.issue(root_key, include_labels=bool(expected_label))
     if root.get("key") != root_key or not isinstance(root.get("fields"), dict):
         raise RuntimeError(f"Reporting root {root_key} is inaccessible or incomplete")
     if (root["fields"].get("issuetype") or {}).get("name") not in {"Research Project", "Objective", "Epic"}:
@@ -459,11 +524,41 @@ def collect(reader, root_key, start, end, zone, retrieved_at=None, expected_labe
     }
 
 
-def collect_label(reader, label, project, start, end, zone):
-    """Collect a label-selected Research Project using the same evidence contract."""
+def collect_label(reader, label, project, start, end, zone, allowed_roots=None):
+    """Collect one dated bundle across matching Research Projects.
+
+    Parameters
+    ----------
+    reader : JiraReader
+        Authenticated GET-only Jira client.
+    label : str
+        Label selecting current Research Projects.
+    project : str or None
+        Permitted Jira project key, or None when unscoped.
+    start : date
+        First included local calendar day.
+    end : date
+        Last included local calendar day.
+    zone : ZoneInfo
+        Reporting timezone for the shared period and cutoff.
+    allowed_roots : list[str], optional
+        Research Project keys permitted by a narrower reporting boundary.
+
+    Returns
+    -------
+    dict
+        Label selector, matched and included roots, dated evidence and gaps.
+
+    Raises
+    ------
+    ValueError
+        If the label or reporting dates require clarification.
+    RuntimeError
+        If root discovery or accessible evidence cannot support a report.
+    """
     search_gap = None
     try:
-        projects, resolved_label = reader.projects(label, project)
+        projects, resolved_label = reader.projects(label, project, allowed_roots)
     except PartialRetrieval as error:
         search_gap = {"key": None, "endpoint": "projects", "page": error.page,
                       "reason": str(error)}
@@ -476,6 +571,13 @@ def collect_label(reader, label, project, start, end, zone):
         except ValueError as no_match:
             raise RuntimeError(f"Project label search incomplete at page {error.page}; "
                                "no usable Research Project match found") from no_match
+    if allowed_roots:
+        projects = [issue for issue in projects if issue.get("key") in allowed_roots]
+        if not projects:
+            if search_gap:
+                raise RuntimeError(f"Project label search incomplete at page {search_gap['page']}; "
+                                   "no permitted match in accessible pages")
+            raise ValueError("No matching Research Projects within permitted reporting roots; clarify the label or scope")
     unique_projects = []
     duplicates = []
     seen_keys = set()
@@ -547,6 +649,7 @@ def main():
     parser.add_argument("--site", required=True, help="Jira hostname from the invoking project's guidance")
     parser.add_argument("--project-label", action="store_true", help="interpret root argument as a Research Project label")
     parser.add_argument("--project", help="permitted Jira project key for label search")
+    parser.add_argument("--allowed-project-root", action="append", help="restrict label search to a permitted Research Project key (repeatable)")
     parser.add_argument("--timezone", help="IANA timezone (defaults to the authenticated Jira user's timezone)")
     parser.add_argument("--netrc-file", type=Path, default=Path.home() / ".jira/netrc")
     args = parser.parse_args()
@@ -558,10 +661,10 @@ def main():
             raise ValueError("Jira has no reporting timezone; specify --timezone")
         zone = ZoneInfo(zone_name)
         if args.project_label:
-            result = collect_label(reader, args.root, args.project, start, end, zone)
+            result = collect_label(reader, args.root, args.project, start, end, zone, args.allowed_project_root)
         else:
-            if args.project:
-                raise ValueError("--project requires --project-label")
+            if args.project or args.allowed_project_root:
+                raise ValueError("--project and --allowed-project-root require --project-label")
             result = collect(reader, args.root, start, end, zone)
     except (OSError, ValueError, ZoneInfoNotFoundError, RuntimeError, KeyError) as error:
         print(f"Evidence collection failed: {error}", file=sys.stderr)
