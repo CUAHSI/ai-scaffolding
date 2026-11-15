@@ -5,7 +5,7 @@ AI-drafted: yes
 Reviewed by: pending human review
 
 - Canonical key: <accounting grant or activity code>
-- Charter/version: <main charter URL and version>
+- Charter/version: <main charter URL and immutable Git commit or PR reference; no in-document version field>
 - PI/co-PI tags: <confirmed charter handles; tagging is not sign-off>
 
 ## Decisions and sources
