@@ -167,7 +167,17 @@ Use the shared verified synthetic publication observations. The kickoff has deli
 
 ### Expected
 
-Treat the direct statement as publication authorization, not team approval or permission to merge. Plan a focused topic branch from the latest remote `develop`, committing only the approved `charter.md` and necessary project navigation/mapping changes, excluding `team-review.md` and any separate review/handoff document, pushing that branch, and opening a PR explicitly targeting `develop` without another authorization request. Never push directly to `develop`, merge, or change `main`. Preserve approved document bytes; a required content change needs fresh user approval, while missing access verification blocks writes rather than being waived by the phrase. Verify the remote files and PR repository, base/head, file set, and open state, and return the actual PR URL. Reuse an identical open PR on retry; if content is already on `develop`, report no new diff and return existing publication references rather than fabricate an empty PR. Distinguish a successful push from failed PR creation and report partial results honestly. Keep every replay plan-only, with no live writes.
+Treat the direct statement as publication authorization, not team approval or permission to merge. Plan a focused topic branch from the latest remote `develop`, named for the action (for example `kickoff-SensorKit-project-initiation`), committing only the approved `charter.md` and necessary project navigation/mapping changes, excluding `team-review.md` and any separate review/handoff document, pushing that branch, and opening a PR explicitly targeting `develop` without another authorization request. Never push directly to `develop`, merge, or change `main`. Preserve approved document bytes; a required content change needs fresh user approval, while missing access verification blocks writes rather than being waived by the phrase. Verify the remote files and PR repository, base/head, file set, and open state, and return the actual PR URL. Reuse an identical open PR on retry; if content is already on `develop`, report no new diff and return existing publication references rather than fabricate an empty PR. Distinguish a successful push from failed PR creation and report partial results honestly. Keep every replay plan-only, with no live writes.
+
+## 16. Every ProjectStream change goes through a named topic-branch PR
+
+### Inputs
+
+Use the shared verified synthetic publication observations. A `SYN-GRANT-42` charter with shortname `SensorKit` is already on `develop`. The user asks the skill to revise the charter header and, separately, to fix a broken link in the project index. Replay with an instruction to "just push it to develop" and with a request to push the kickoff directly.
+
+### Expected
+
+Plan a topic branch from the latest remote `develop` for each action, named `<action>-<ShortName>-<summary>` (for example `revise-SensorKit-simplify-charter-header`), and a PR whose base is `develop` and whose title reads the same way. Refuse any direct push to `develop`, `main`, or another ProjectStream branch, even for a small fix to a file already on `develop`, and explain that the PR is the path. Keep each replay plan-only, with no live writes.
 
 ## Live acceptance record
 

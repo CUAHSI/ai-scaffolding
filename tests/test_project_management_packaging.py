@@ -717,5 +717,34 @@ class ProjectManagementPackagingTests(unittest.TestCase):
         self.assertIn("excluding `team-review.md` and any separate review/handoff document", publication_scenarios)
 
 
+    def test_projectstream_changes_go_through_named_develop_prs(self):
+        """Check that the PR-only rule and branch naming are bundled."""
+        skill = (SKILL_DIRECTORY / "SKILL.md").read_text()
+        publication = (SKILL_DIRECTORY / "assets" / "publication.md").read_text()
+        rule = publication.split("## ProjectStream submission rule\n", 1)[1].split("\n## 1.", 1)[0]
+        content = " ".join(rule.replace("**", "").replace("`", "").split())
+        for requirement in (
+            "reaches the repository only through a pull request",
+            "Never push directly to develop, main, or any other ProjectStream branch",
+            "topic branch from the latest remote develop",
+            "open a PR whose base is develop",
+            "<action>-<ShortName>-<summary>",
+            "kickoff-FIMBox-project-initiation",
+            "revise-FIMBox-simplify-charter-header",
+            "kickoff - FIMBox project initiation",
+        ):
+            with self.subTest(requirement=requirement):
+                self.assertIn(requirement, content)
+        flat_skill = " ".join(skill.replace("**", "").replace("`", "").split())
+        self.assertIn("kickoff-<ShortName>-<summary>", flat_skill)
+        self.assertIn("every ProjectStream change, including a later revise", flat_skill)
+        self.assertIn("assets/publication.md#projectstream-submission-rule", skill)
+        readme = (SKILL_DIRECTORY.parent / "README.md").read_text()
+        self.assertIn("the branch is named for the action", readme)
+        scenarios = (SKILL_DIRECTORY / "assets" / "publication-scenarios.md").read_text()
+        self.assertIn("## 16. Every ProjectStream change goes through a named topic-branch PR", scenarios)
+        self.assertIn("Refuse any direct push to `develop`, `main`", scenarios)
+
+
 if __name__ == "__main__":
     unittest.main()
