@@ -239,7 +239,7 @@ class ProjectManagementPackagingTests(unittest.TestCase):
             "same write/merge authorization and repository-rule requirements",
             "Preserve charter/log bytes exactly", "Move other existing project files unchanged",
             "initialize no new charter, log, or decision", "Keep Git history",
-            "immutable commit links", "Preserve each branch's own snapshot/proposal contents",
+            "immutable commit links", "Never copy one branch over the other",
             "case-only rename", "Update the policy mapping", "central README/index navigation",
             "every affected related-repository link", "Historical immutable references",
             "Compare source and destination charter/log bytes before and after merge",
@@ -508,7 +508,7 @@ class ProjectManagementPackagingTests(unittest.TestCase):
         for requirement in (
             "Missing planning fields are called out in the PR/handoff for external resolution",
             "Missing canonical identity or an unsafe/unconfirmed directory still blocks writes",
-            "Both paths require verified access and content screening",
+            "Storage requires verified access and content screening",
             "A changed source requires reselection and a refreshed diff",
             "never claim it was reviewed based on an earlier revision",
         ):
@@ -523,7 +523,7 @@ class ProjectManagementPackagingTests(unittest.TestCase):
             "verifying any checks those rules require without bypassing them",
             "Record reviewers and checked boxes only from verified evidence",
             "existing AI/review fields remain for decisions, not as charter approval requirements",
-            "an open promotion PR is not a published `main` snapshot",
+            "Proposal storage on `develop` is not an approved `main` snapshot",
         ):
             with self.subTest(promotion_requirement=requirement):
                 self.assertIn(requirement, promotion)
@@ -586,10 +586,11 @@ class ProjectManagementPackagingTests(unittest.TestCase):
                 "existing policy/decision-artifact AI/review fields distinct from charter approval",
                 "PR creation does not authorize merging",
             ),
-            "2. Proposal storage and selective promotion with external PR review": (
+            "2. Proposal storage with external PR review, and promotion is declined": (
                 "branch makes the whole charter a proposal without labels or Status metadata",
                 "Open-PR preparation is not blocked by absent PI/co-PI sign-off or uncollected team reviews",
                 "Do not transfer review from `source-r1`, certify approval",
+                "promotion to `main` is done manually in GitHub outside this skill",
             ),
             "4. Restricted content and changed source require an external review handoff": (
                 "stop before committing it to either branch/history",
@@ -744,6 +745,33 @@ class ProjectManagementPackagingTests(unittest.TestCase):
         scenarios = (SKILL_DIRECTORY / "assets" / "publication-scenarios.md").read_text()
         self.assertIn("## 16. Every ProjectStream change goes through a named topic-branch PR", scenarios)
         self.assertIn("Refuse any direct push to `develop`, `main`", scenarios)
+
+
+    def test_promotion_to_main_is_manual_and_outside_the_skill(self):
+        """Check that the skill never writes to main or prepares promotion PRs."""
+        skill = (SKILL_DIRECTORY / "SKILL.md").read_text()
+        flat_skill = " ".join(skill.replace("**", "").replace("`", "").split())
+        self.assertIn("Promotion of a charter from develop to main is manual in GitHub and outside this skill", flat_skill)
+        publication = (SKILL_DIRECTORY / "assets" / "publication.md").read_text()
+        flat = " ".join(publication.replace("**", "").replace("`", "").split())
+        for requirement in (
+            "never opens a PR targeting main, copies a charter onto main, or prepares a promotion",
+            "Promotion to main is manual in GitHub and outside this skill",
+            "Never start a branch from main or copy charter bytes onto it",
+            "this skill creates no decision log for a proposal",
+        ):
+            with self.subTest(requirement=requirement):
+                self.assertIn(requirement, flat)
+        for stale in (
+            "prepare a focused PR targeting main",
+            "start a fresh branch from current main",
+            "initial charter promotion, place an empty",
+        ):
+            with self.subTest(stale=stale):
+                self.assertNotIn(stale, flat)
+        readme = (SKILL_DIRECTORY.parent / "README.md").read_text()
+        self.assertNotIn("promotion PR targeting main", readme.replace("`", ""))
+        self.assertIn("promotion to `main` is manual in GitHub", readme)
 
 
 if __name__ == "__main__":
