@@ -6,17 +6,29 @@ Reviewed by: pending human review
 
 ## Responsibility and branches
 
-- Central repository: <confirmed private owner/repository>
+- Central repository: https://github.com/CUAHSI/CUAHSI-ProjectStream (fixed destination; verify live privacy and access before publishing)
 - Responsible owner: <named practice owner / pending>
 - Access administrator: <named employee; explicit credentials/hosting delegation / pending>
 - Tooling approval: <Tony's approval evidence for this configuration/version / pending>
 - Approved-charter branch: main
 - In-progress-charter branch: develop
-- Canonical project path: `projects/<accounting-code>/charter.md`
-- Adjacent append-only log: `projects/<accounting-code>/decision-log.md`
+- Canonical project path: `projects/<accounting-code>-<shortname>/charter.md`
+- Adjacent append-only log: `projects/<accounting-code>-<shortname>/decision-log.md`
 - Branch rules and merge policy: <observed rules for main/develop and decision branches; employee review/merge and self-merge check / pending>
 
-The accounting code identifies one project across all its repositories. If a code needs path encoding, record the reversible mapping here; preserve the original code in the charter. Approved snapshots live on `main`; candidates on `develop` are visibly drafts. Promote only the exact signed-off candidate, not unrelated drafts from `develop`. Historical approved versions remain retrievable through Git commit links. Decision-log corrections append superseding entries rather than edit or remove existing entries.
+The accounting code identifies one project across all its repositories; a confirmed, case-preserving shortname is a human-readable folder suffix, not an identity or an inferred slug. Apply the installed skill's publication guide (§3, directory contract) for safe single-segment validation, reversible code encoding, and collision/duplicate checks. Read identity from charter metadata and this mapping, never by splitting directory names on hyphens. Approved snapshots live on `main`; candidates on `develop` are visibly drafts. Promote only the exact signed-off candidate, not unrelated drafts from `develop`. Historical approved versions remain retrievable through Git commit links. Decision-log corrections append superseding entries rather than edit or remove existing entries.
+
+## Project directory mapping
+
+| Accounting code (canonical key) | Confirmed shortname | Code component | Reversible encoding/decoding rule | Exact project directory | Confirmation evidence |
+| --- | --- | --- | --- | --- | --- |
+| <original code, unchanged> | <user-confirmed case-preserving suffix / pending> | <original safe code or agreed encoded component> | <none, or reversible rule> | `projects/<accounting-code>-<shortname>/` | <user confirmation / pending> |
+
+Use one directory per accounting code per branch and the same mapping across `main`/`develop`; inspect charter identities and existing/pending paths before writes. An occupied or filesystem-equivalent destination, ambiguous encoding, or duplicate code under another shortname blocks creation/rename until reconciled. A different suffix for an existing code is a rename request, not a new project.
+
+- Path-only rename record: <original code; old/new paths and shortname; encoding rule; affected branches; source and rename commit/PR links; byte-comparison and navigation evidence; pending gaps / not applicable>
+
+For an explicitly requested path-only rename, follow the installed skill's publication guide (Path-only rename): preserve charter/log bytes and Git history, and update this mapping and active navigation. The charter's absent or historical Shortname field remains unchanged; current folder metadata lives here. A directory move does not revise commitments or require a new charter approval. Content revisions still use the existing lifecycle/sign-off rules.
 
 ## Access configuration
 
@@ -51,9 +63,9 @@ Use `verified`, `failed`, or `unverified` for each result, with an attributable 
 
 | Project/activity repository | Canonical charter URL | Link verification |
 | --- | --- | --- |
-| <every relevant repository, or confirmed none> | <central /blob/main/projects/accounting-code/charter.md> | <commit/read-back evidence or pending> |
+| <every relevant repository, or confirmed none> | <https://github.com/CUAHSI/CUAHSI-ProjectStream/blob/main/projects/accounting-code-shortname/charter.md; exact mapped segment, URL-escaped> | <commit/read-back evidence or pending> |
 
-When a linking repository is public or shared with nonstaff, use neutral link text and confirm that its path/URL discloses no restricted identity. Keep charter content in the central repository.
+When a linking repository is public or shared with nonstaff, use neutral link text and confirm that its path/URL discloses no restricted identity. Keep charter content in the central repository. After a path-only rename, update active central and related-repository navigation to the mapped path, preserving historical immutable commit URLs and recording any unauthorized/unverified link changes as gaps.
 
 ## Repeatable procedure
 

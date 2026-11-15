@@ -12,6 +12,8 @@ Confirm which co-PI owns this activity separately from the overall award's PI ro
 
 ## Existing charter or requested revision
 
+For an explicitly requested path-only rename, use [Publication's rename branch](publication.md#path-only-rename): preserve charter/log bytes and history and update navigation. This is not a charter revision or a new project; the session and new-sign-off rules below apply to charter content changes, not a directory move.
+
 1. Identify the baseline charter, its version, canonical code, approval record, and proposed changes. Preserve that baseline and its approval as historical evidence. A routine update, decision, or generic request to tidy the charter is not permission to change its commitments.
 2. Establish that a **Wayfinder or grilling session** authorizes the revision. Accept a supplied, attributable session record naming the participants and agreed changes; if its scope or authority is unclear, ask. If no session has happened, stop before altering the charter: show the proposed questions and ask the user to run Wayfinder/grilling, or explicitly agree to conduct a grilling session in this conversation. Merely labeling a routine edit a re-grill is not a session.
 3. If running the session here, identify the human participants and approval role, challenge the reasons, scope, dependencies, and trade-offs of the proposed change, and obtain an explicit account of the agreed changes and unresolved points. Only then draft the candidate. A supplied session record may support drafting, but does not by itself establish approval of the resulting charter version.

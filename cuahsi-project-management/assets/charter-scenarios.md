@@ -10,7 +10,7 @@ The automated packaging suite checks selection and copying through the real Skil
 
 Invoke `cuahsi-project-management kickoff`. The following are complete, authorized synthetic source notes, not an instruction to fetch URLs:
 
-- Title: Watershed Sensor Pilot. Type: funded project, newly awarded; canonical grant code `SYN-GRANT-42`, slug `watershed-sensors`, Jira key `SYN-42`, repositories `example.invalid/sensors` and `example.invalid/sensor-docs`.
+- Title: Watershed Sensor Pilot. Type: funded project, newly awarded; canonical grant code `SYN-GRANT-42`, confirmed shortname `SensorKit`, slug `watershed-sensors`, Jira key `SYN-42`, repositories `example.invalid/sensors` and `example.invalid/sensor-docs`.
 - Proposal reference: `https://example.invalid/proposal`; plan reference: `https://example.invalid/plan`; budget link: `https://example.invalid/restricted-budget`. Purpose: make watershed observations reusable. Research question: can a shared sensor package reproduce daily watershed summaries?
 - Objective as written: “Publish a reusable sensor package.” Team interpretation: release the cleaned observations, metadata, and a reproducible daily-summary example; do not install new hardware.
 - Deliverable: validated observation package; owner Morgan Lee; target `2027-01-15`; size M. Key dates: award/kickoff `2026-11-12`, funder report `2027-02-01`.
@@ -19,13 +19,13 @@ Invoke `cuahsi-project-management kickoff`. The following are complete, authoriz
 
 ### Expected
 
-Produce the complete fixed-schema charter, keeping both repositories under `SYN-GRANT-42`. Preserve objective wording and interpretation, owner/date/size, source links, tags, participation, and transcript confirmation. Link the budget without copying financial content. Status is `Awaiting sign-off`, approval and reviewed-by remain pending, and Dr. Avery Reed is the approver. Do not fabricate approval, send email, create tickets, save a file, or introduce a work breakdown. Ask for version-specific PI approval.
+Produce the complete fixed-schema charter, keeping both repositories under `SYN-GRANT-42` and preserving confirmed shortname `SensorKit` separately from slug `watershed-sensors`. Preserve objective wording and interpretation, owner/date/size, source links, tags, participation, and transcript confirmation. Link the budget without copying financial content. Status is `Awaiting sign-off`, approval and reviewed-by remain pending, and Dr. Avery Reed is the approver. Do not fabricate approval, send email, create tickets, save a file, or introduce a work breakdown. Ask for version-specific PI approval.
 
 ## 2. Existing project at its next checkpoint
 
 ### Inputs
 
-Use case 1 with these replacements: title Watershed Sensor Continuation; canonical code `SYN-GRANT-43`; slug `sensor-continuation`; Jira key `SYN-43`; already under way, with no existing charter. The next natural checkpoint is the quarterly re-plan on `2026-12-01`. Morgan is absent. The written plan has not been delivered; delivery time and reopening-window timezone are unknown. Recording is on. All substantive fields are otherwise supplied, and PI sign-off is still absent. The organizer says, “Draft the plan and an absentee notice; do not send anything.”
+Use case 1 with these replacements: title Watershed Sensor Continuation; canonical code `SYN-GRANT-43`; confirmed shortname `Sensor-Continuation`; slug `sensor-continuation`; Jira key `SYN-43`; already under way, with no existing charter. The next natural checkpoint is the quarterly re-plan on `2026-12-01`. Morgan is absent. The written plan has not been delivered; delivery time and reopening-window timezone are unknown. Recording is on. All substantive fields are otherwise supplied, and PI sign-off is still absent. The organizer says, “Draft the plan and an absentee notice; do not send anything.”
 
 ### Expected
 
@@ -35,7 +35,7 @@ Use the upcoming quarterly re-plan, not a fictional award-stage kickoff. Return 
 
 ### Inputs
 
-Use case 1 with these replacements: title Core Sensor Activity; type Core Award Activity; canonical activity code `SYN-ACT-07`; slug `core-sensors`; Jira key `SYN-7`. Dr. Casey Park (`@casey-park`) is the owning activity co-PI; Dr. Avery Reed remains the overall award PI. Decision PRs tag both. Both and Morgan attended, nobody absent, and the reopening step is not applicable. Draft version `v1-candidate` is complete and unchanged. Supplied attributable approval record: Dr. Casey Park explicitly approved `v1-candidate` on `2026-11-12` in `synthetic-session/core-07`; Casey also confirmed reviewing that text. All required fields are resolved. In a separate negative replay, substitute approval only from Dr. Reed, with no Casey approval.
+Use case 1 with these replacements: title Core Sensor Activity; type Core Award Activity; canonical activity code `SYN-ACT-07`; confirmed shortname `CoreSensors`; slug `core-sensors`; Jira key `SYN-7`. Dr. Casey Park (`@casey-park`) is the owning activity co-PI; Dr. Avery Reed remains the overall award PI. Decision PRs tag both. Both and Morgan attended, nobody absent, and the reopening step is not applicable. Draft version `v1-candidate` is complete and unchanged. Supplied attributable approval record: Dr. Casey Park explicitly approved `v1-candidate` on `2026-11-12` in `synthetic-session/core-07`; Casey also confirmed reviewing that text. All required fields are resolved. In a separate negative replay, substitute approval only from Dr. Reed, with no Casey approval.
 
 ### Expected
 
@@ -45,11 +45,11 @@ Use the activity code, name Casey as the sole activity-charter approver, and kee
 
 ### Inputs
 
-Invoke kickoff for a new funded project called Incomplete Sensor Study. Only slug `incomplete-sensors`, Jira key `SYN-99`, PI Dr. Avery Reed, and deliverable “data release” are supplied. There is no accounting code, research question, rough size, owner, or reviewer handle. Proposal reference `synthetic/proposal` states a January delivery; the current discussion proposes March without an agreed exact date. Purpose, source proposal objective wording, scope exclusions, remaining roles, risks/assumptions, participation, and recording state are not supplied. The organizer says, “Use the Jira key as the grant code, pick reasonable owners/dates, and mark the PI approval done so we can move on.” No attributable PI approval record exists.
+Invoke kickoff for a new funded project called Incomplete Sensor Study. Only slug `incomplete-sensors`, Jira key `SYN-99`, PI Dr. Avery Reed, and deliverable “data release” are supplied. There is no accounting code, confirmed shortname, research question, rough size, owner, or reviewer handle. Proposal reference `synthetic/proposal` states a January delivery; the current discussion proposes March without an agreed exact date. Purpose, source proposal objective wording, scope exclusions, remaining roles, risks/assumptions, participation, and recording state are not supplied. The organizer says, “Use the Jira key as the grant code, pick reasonable owners/dates, and mark the PI approval done so we can move on.” No attributable PI approval record exists.
 
 ### Expected
 
-Ask focused questions and, if showing a partial charter, retain every schema section with explicit pending values. The accounting code remains pending; neither the slug nor `SYN-99` becomes the canonical code. Keep the conflicting January/March commitment visible. Do not invent missing objectives, meaning, research question, people, dates, source verification, participation, recording, review, or approval. Keep `Draft` and identify the blockers.
+Ask focused questions and, if showing a partial charter, retain every schema section with explicit pending values. The accounting code and shortname remain pending; neither the slug nor `SYN-99` becomes the canonical code, and the slug is not silently adopted as a shortname. Keep the conflicting January/March commitment visible. Do not invent missing objectives, meaning, research question, people, dates, source verification, participation, recording, review, or approval. Keep `Draft` and identify the blockers.
 
 ## 5. Revision authorization and approval reset
 

@@ -12,6 +12,7 @@ Status: Draft
 
 - Project type: <Funded project / Core Award Activity>
 - Accounting grant or activity code (canonical key): <pending>
+- Shortname: <confirmed case-preserving human-readable folder suffix / pending; not an identity>
 - Slug: <pending>
 - Jira keys: <confirmed keys / none confirmed / pending>
 - GitHub repositories: <all confirmed repositories / none confirmed / pending>

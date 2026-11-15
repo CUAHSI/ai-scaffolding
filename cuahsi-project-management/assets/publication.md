@@ -1,14 +1,14 @@
 # Publish project information (CAM-1634)
 
-Use this procedure only for an explicit `cuahsi-project-management publish` request, including a request to store an in-progress charter. Publication is a separate branch of the skill, not a kickoff side effect. Every generated policy, log, PR, notice, and handoff carries an AI-drafted marker and a reviewed-by field, with human review recorded only from actual evidence. Use GitHub CLI and Git already available in the environment; no separate application, hosting, transcript ingestion, or email service is introduced.
+Use this procedure only for an explicit `cuahsi-project-management publish` request, including a request to store an in-progress charter or an explicitly requested path-only rename. Publication is a separate branch of the skill, not a kickoff side effect. Every generated policy, log, PR, notice, and handoff carries an AI-drafted marker and a reviewed-by field, with human review recorded only from actual evidence. Use GitHub CLI and Git already available in the environment; no separate application, hosting, transcript ingestion, or email service is introduced.
 
 ## 1. Establish destination and authority
 
-Confirm the private central repository, responsible practice owner, access administrator, canonical accounting code, charter/version, intended draft or approved publication, and all related project/activity repositories. Read the existing central policy or start a candidate from the [repository policy template](repository-policy-template.md). Tony approves tooling changes; credential/hosting work has a named, explicitly delegated owner. Ask for missing administrative authority instead of choosing a staff team or changing permissions unilaterally.
+Use `CUAHSI/CUAHSI-ProjectStream`, the [skill's fixed publication destination](../SKILL.md), without asking the user to choose a central repository. Confirm the responsible practice owner, access administrator, canonical accounting code, shortname, charter/version, intended draft or approved publication (or path-only rename), and all related project/activity repositories. Collect or explicitly confirm the shortname with the user, preserving its case: it is a human-readable folder suffix, not a new identity. A slug/title may support a proposal, but is not confirmation; keep a missing shortname pending rather than blindly deriving it from the slug. Read the existing central policy or start a candidate from the [repository policy template](repository-policy-template.md). Tony approves tooling changes; credential/hosting work has a named, explicitly delegated owner. Ask for missing administrative authority instead of choosing a staff team or changing permissions unilaterally.
 
-Inspect repository visibility, contents, branches, and current project files with authenticated read-only operations. An empty repository has no charter and may have no branches even when its configured default branch is `main`. A failed request is not evidence of absence. Keep live project documents and audit data outside this source checkout and the installed skill. Use an explicitly authorized private workspace; retain existing files and user changes.
+Inspect ProjectStream's visibility, contents, branches, and current project files with authenticated read-only operations. Verify that the authorized local checkout targets this repository; a different current repository or Git remote is not the central destination. If ProjectStream is unavailable or not private, report the blocker rather than create or use a replacement. An empty repository has no charter and may have no branches even when its configured default branch is `main`. A failed request is not evidence of absence. Keep live project documents and audit data outside this source checkout and the installed skill. Use an explicitly authorized private workspace; retain existing files and user changes.
 
-**Done when:** the destination and requested writes are explicit, and missing identity, policy, credentials, or approval information is listed. Without a canonical code, offer a plan but store neither a draft nor an approved charter under an invented identity.
+**Done when:** the destination and requested writes are explicit, and missing identity, policy, credentials, or approval information is listed. Without a canonical code or confirmed shortname, offer a plan and clarification questions but create or rename no project directory on either branch.
 
 ## 2. Audit effective access
 
@@ -17,15 +17,15 @@ Complete the policy's access configuration and verification record before commit
 For the confirmed repository, representative read operations are:
 
 ```sh
-gh repo view <owner/repository> --json isPrivate,defaultBranchRef,viewerPermission
-gh api repos/<owner/repository>/collaborators --paginate
-gh api 'repos/<owner/repository>/collaborators?affiliation=outside' --paginate
-gh api repos/<owner/repository>/teams --paginate
-gh api repos/<owner/repository>/invitations --paginate
-gh api repos/<owner/repository>/keys --paginate
-gh api repos/<owner/repository>/rulesets --paginate
-gh api repos/<owner/repository>/rules/branches/main
-gh api repos/<owner/repository>/rules/branches/develop
+gh repo view CUAHSI/CUAHSI-ProjectStream --json isPrivate,defaultBranchRef,viewerPermission
+gh api repos/CUAHSI/CUAHSI-ProjectStream/collaborators --paginate
+gh api 'repos/CUAHSI/CUAHSI-ProjectStream/collaborators?affiliation=outside' --paginate
+gh api repos/CUAHSI/CUAHSI-ProjectStream/teams --paginate
+gh api repos/CUAHSI/CUAHSI-ProjectStream/invitations --paginate
+gh api repos/CUAHSI/CUAHSI-ProjectStream/keys --paginate
+gh api repos/CUAHSI/CUAHSI-ProjectStream/rulesets --paginate
+gh api repos/CUAHSI/CUAHSI-ProjectStream/rules/branches/main
+gh api repos/CUAHSI/CUAHSI-ProjectStream/rules/branches/develop
 ```
 
 Also inspect organization permissions/owners, each team's members and children, applicable branch protections including inherited rules, and installed GitHub Apps using appropriately authorized administration APIs. Resolve actual account/team names from read results before generating commands. Keep roster and audit details private; record references rather than HR contents or credentials. An inaccessible API is `unverified`, not an empty access list.
@@ -41,15 +41,33 @@ Under the confirmed policy, `main` contains approved charters and their decision
 ```text
 POLICY.md
 .github/pull_request_template.md
-projects/<accounting-code>/charter.md
-projects/<accounting-code>/decision-log.md
+projects/<accounting-code>-<shortname>/charter.md
+projects/<accounting-code>-<shortname>/decision-log.md
 ```
 
-The adjacent decision log is required for an approved charter. A draft does not invent approved-charter metadata or decision entries. Use one project directory per accounting code, including multi-repository projects. If a code is not safe as a single path segment, agree and record a reversible encoding; reject traversal, absolute paths, and ambiguous collisions. Preserve the original code in charter identity. Build canonical navigation URLs using `blob/main`, never the changing default branch or `develop`.
+The adjacent decision log is required for an approved charter. A draft does not invent approved-charter metadata or decision entries. For example, code `A250366S013` and confirmed shortname `FIMBox` give `projects/A250366S013-FIMBox/`. Use the following directory contract for creation, reuse, and renames:
+
+- **Identity:** read the original accounting code from charter identity and the policy's directory mapping. Never infer identity by splitting on hyphens: both codes and shortnames may contain them. The shortname and slug are not canonical keys. Unknown or conflicting identity/path metadata remains a blocker until confirmed.
+- **Safe segment:** validate the confirmed shortname, code component, and complete `<accounting-code>-<shortname>` as safe single path segments before writes. Require nonempty values; reject `.`/`..`, traversal, absolute paths, `/` or `\`, control/NUL characters, filesystem-reserved names/characters, trailing spaces/dots, and names exceeding destination filesystem limits. Verify the resolved directory stays directly under `projects/`, without symlink redirection. Propose a safe alternative shortname for confirmation rather than silently stripping characters, lowercasing, or slugifying it.
+- **Encoding:** if the original code cannot be used safely, agree a reversible accounting-code encoding and record the original code, encoded component, encoding/decoding rule, confirmed shortname, and exact directory in the policy before use. Preserve the original code in charter identity. Record `none` when no encoding is needed. This filename encoding is distinct from URL escaping: build URLs by URL-escaping the actual recorded segment, including any literal encoding markers.
+- **Uniqueness:** inspect policy mappings, charter identity fields, existing directories (including legacy names), and pending publication PRs on `main` and `develop`. Use one project directory per accounting code per branch, including multi-repository projects, with the same agreed mapping across branches. Reuse an existing mapping for that code; a different requested suffix requires an explicit path-only rename, not a second directory. Block an occupied destination, a case-folding/filesystem-equivalent collision, an ambiguous encoding, or duplicate directories for the same accounting code even under different shortnames. Stop for reconciliation rather than overwrite, merge, or invent an identity. A project's own corresponding `main`/`develop` copies are not duplicate projects. The verified source of the same requested move is not a second destination occupant; case-only moves still need the safe workspace handling below.
+
+Record the confirmed mapping in the [repository policy](repository-policy-template.md); it is current directory metadata. An absent or historical Shortname field in a signed-off charter is not silently backfilled or rewritten to match it. Build canonical navigation URLs using `blob/main`, never the changing default branch or `develop`.
 
 For an empty repository, obtain approval for a bootstrap commit containing only non-sensitive policy/navigation and the [decision PR template](decision-pr-template.md) at `.github/pull_request_template.md`. Create `main` and then `develop` from that bootstrap, make `main` the default, and read back both refs/configuration. The bootstrap has no approved charter. For existing repositories, propose focused configuration PRs; preserve contents and policy. Adding branches, publishing charter content, granting access, and merging PRs are distinct authorized actions. Confirm the intended changes rather than treating a read/plan request as permission to write. Never force-push, replace history, or merge a whole draft branch into the approved branch.
 
 **Done when:** branches/layout are read back as configured, or their exact remaining setup/delegation is reported. Record Tony's actual tooling approval and the responsible administrator; drafting policy is not approval of it.
+
+### Path-only rename
+
+Use this branch only when the user explicitly requests a path-only rename. Apply steps 1–3, including the unchanged access audit, and the same write/review/merge authorization requirements in step 5; replace charter selection/promotion in steps 4–5 with these rename checks, then continue to navigation in step 6.
+
+1. Establish the existing project's accounting code from charter/policy metadata, source paths and revisions on each affected branch, and confirmed destination shortname. Apply the directory contract above, including legacy directories and pending PRs. If only publication was requested and an existing path differs, ask before moving it. Report duplicate or conflicting mappings as blockers, not permission to consolidate projects.
+2. Move the existing project directory on each explicitly authorized branch through focused changes. Preserve charter/log bytes exactly, including version, approval, commitments, review markers, log entries/order/IDs, and historical baseline references. Move other existing project files unchanged; initialize no new charter, log, or decision. Keep Git history and immutable commit links retrievable through normal rename commits; never rewrite history or force-push. Preserve each branch's own approved/draft contents rather than copying one branch over the other. For a case-only rename, verify a vacant temporary segment if the workspace filesystem needs a two-step move, then verify the final spelling.
+3. Update the policy mapping (original code, encoding, shortname, old/new paths and rename commit evidence), central README/index navigation, and every affected related-repository link under its normal authorization/PR process. Historical immutable references inside the charter/log remain untouched. If a branch or link change lacks authorization, list that migration gap individually; do not create a replacement project or claim completion.
+4. Show the rename/navigation-only diff before writes. Compare source and destination charter/log bytes before and after merge, verify the old directory is absent and only one directory maps to the code on each migrated branch, and read back active navigation URLs. Recheck destination occupancy and latest branch state on retry/concurrent edits; an already completed identical rename needs no duplicate PR. Report partial moves and link gaps explicitly.
+
+A path-only rename is not a new project or charter-content revision: it needs no new kickoff, Wayfinder/grilling session, charter version, or PI/co-PI sign-off. Existing approval remains evidence for the unchanged bytes; it does not authorize content changes. If the user also asks to revise commitments or charter metadata, separate that candidate and apply the existing lifecycle/sign-off rules instead of bundling it into the move.
 
 ## 4. Select and screen the exact charter
 
@@ -77,10 +95,10 @@ Read back merged files from the destination branch. Compare charter bytes/versio
 
 ## 6. Link every project/activity repository and hand off
 
-For an approved charter, produce the canonical `https://github.com/<owner>/<repository>/blob/main/projects/<encoded-code>/charter.md` URL and list every related repository recorded in the charter. With explicit authorization, add a neutral charter link to each repository's README or existing project-navigation document through its normal PR process. Do not copy the charter or restricted source content. For public/nonstaff repositories, confirm that even the path/URL discloses no restricted identity before proposing it. If identity disclosure is restricted, obtain an approved neutral redirect/export handoff instead of posting the revealing URL. Missing permissions or authorization produce ready-to-review link proposals, not claimed edits.
+For an approved charter, produce the canonical `https://github.com/CUAHSI/CUAHSI-ProjectStream/blob/main/projects/<accounting-code>-<shortname>/charter.md` URL using the policy's exact directory mapping (reversible code component if needed) and URL-escaping the actual segment, and list every related repository recorded in the charter. For a rename, update active central and related-repository navigation to the new path without changing charter/log bytes or historical commit URLs. With explicit authorization, add a neutral charter link to each repository's README or existing project-navigation document through its normal PR process. Do not copy the charter or restricted source content. For public/nonstaff repositories, confirm that even the path/URL discloses no restricted identity before proposing it. If identity disclosure is restricted, obtain an approved neutral redirect/export handoff instead of posting the revealing URL. Missing permissions or authorization produce ready-to-review link proposals, not claimed edits.
 
 Read back every merged link on its actual target branch and record URL/commit evidence in the central policy's navigation table. A multi-repository project is complete only when all relevant repositories have verified links, or the gaps are individually named. Do not edit the signed-off charter just to record operational link checks. Re-run access checks after configuration changes and keep private evidence in the authorized central policy/audit location.
 
-Return branch/commit/PR URLs, canonical identity and version, approval status, decision-log location, owner/delegations, access results, and per-repository link results. Display remaining blockers and next actors. Keep live project content and access rosters out of the ai-scaffolding checkout and Jira completion comments. The independent `project-report` workflow stays Jira-only and read-only; this workflow introduces no reporting, hosted MkDocs site, exports, transcript fetching, or email sending.
+Return branch/commit/PR URLs, canonical identity and version, confirmed shortname and exact directory/encoding mapping (old/new paths for a rename), approval status, decision-log location, owner/delegations, access results, and per-repository link results. Display remaining blockers and next actors. Keep live project content and access rosters out of the ai-scaffolding checkout and Jira completion comments. The independent `project-report` workflow stays Jira-only and read-only; this workflow introduces no reporting, hosted MkDocs site, exports, transcript fetching, or email sending.
 
 **Done when:** actual publication, access, and link outcomes are distinguishable from proposals and assumptions. Live acceptance needs an approved charter on `main`, adjacent log, verified staff/nonstaff and employee merge checks, and verified links for every related repository; a tested reusable skill alone does not fulfill those operational checks.

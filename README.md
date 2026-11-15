@@ -193,19 +193,51 @@ Charter revisions require an explicit grilling or Wayfinder session, not silent 
 
 **Output and safety limits:** keep the charter in chat unless the user explicitly chooses a private destination outside both the source checkout and the installed skill. Preserve source documents and prior charter versions; do not overwrite originals. Link budget and HR materials rather than copying their contents into the charter.
 
-#### Publish to the private central repository
+#### Example: FIMBox kickoff from attached materials
 
-CAM-1634 adds a separate explicit publication workflow within the same skill:
+The FIMBox kickoff used two Word documents and a screenshot. Attach all three items in your agent:
+
+| Attachment | What it provides |
+| --- | --- |
+| `Project Narrative FY25 Cohen FIMBox.docx` | Overall project objectives, collaborators, outputs, and original schedule. |
+| `CUAHSI-Research-Plan-FIMBox.docx` | CUAHSI's subaward scope, contributions, and expected outputs. |
+| Grant-information screenshot | Project identity, accounting code, lead PI, and award dates. |
+
+![FIMBox grant-information dashboard used for the kickoff](docs/images/fimbox-dashboard-screenshot.png)
+
+*Screenshot supplied as a FIMBox kickoff input.*
+
+Then use the same style of input as the original kickoff, with the local skill available:
 
 ```text
-/cuahsi-project-management publish the signed-off charter to CUAHSI/CUAHSI-ProjectStream; approved charters belong on main and in-progress charters on develop.
+Use the ./cuahsi-project-management skill to kick off the FIMBox project.
+Use the supplementary materials attached:
+- Project Narrative FY25 Cohen FIMBox.docx
+- CUAHSI-Research-Plan-FIMBox.docx
+- Grant-information screenshot
+```
+
+With the skill installed, the equivalent invocation is:
+
+```text
+/cuahsi-project-management kickoff FIMBox using the two attached Word documents and grant-information screenshot.
+```
+
+The Word documents are attachments supplied in the conversation, not files bundled with this repository; the screenshot is reproduced above for reference. Preserve the distinction between the overall project narrative and CUAHSI's commitments, and link rather than transcribe financial details from the screenshot. The agent asks focused questions for missing information; kickoff does not automatically publish a charter.
+
+#### Publish to the private central repository
+
+All project charters and associated files are published to the fixed repository [CUAHSI/CUAHSI-ProjectStream](https://github.com/CUAHSI/CUAHSI-ProjectStream); the agent does not ask you to select a repository for each project. Publication remains a separate, explicitly requested action within the same skill:
+
+```text
+/cuahsi-project-management publish the signed-off charter; approved charters belong on main and in-progress charters on develop.
 /cuahsi-project-management publish this candidate to develop only; PI sign-off is still pending.
 /cuahsi-project-management publish; plan only, no live writes.
 ```
 
-**Publication prerequisites:** Git/GitHub CLI credentials for the authorized private repository/workspace, a canonical accounting code, a named access administrator, Tony's tooling approval, and an authorized staff roster/access audit. Approved publication additionally requires the exact charter's dated, attributable PI or owning co-PI approval. Repository privacy or organization membership alone does not prove staff-only access; failed/inaccessible checks remain explicit blockers, including for draft storage. Keep live charters and access evidence outside this source repository and installed skill.
+**Publication prerequisites:** Git/GitHub CLI credentials for ProjectStream and an authorized private workspace, a canonical accounting code and confirmed case-preserving shortname, a named access administrator, Tony's tooling approval, and an authorized staff roster/access audit. Approved publication additionally requires the exact charter's dated, attributable PI or owning co-PI approval. Repository privacy or organization membership alone does not prove staff-only access; failed/inaccessible checks remain explicit blockers, including for draft storage. Keep live charters and access evidence outside this source repository and installed skill.
 
-Follow [Publication](cuahsi-project-management/assets/publication.md). The central layout is `projects/<accounting-code>/charter.md` with adjacent `decision-log.md`; approved content lives on `main`, in-progress candidates on `develop`. Promote only the signed-off candidate, never unrelated drafts by merging all of `develop`. Initialize an empty log without inventing decisions; preserve existing entries, appending corrections through employee-reviewed decision PRs. Employees may self-merge decision PRs, but that does not substitute for charter sign-off. Link every related project/activity repository to the approved `blob/main` charter without copying restricted content.
+Follow [Publication](cuahsi-project-management/assets/publication.md). The central layout is `projects/<accounting-code>-<shortname>/charter.md` with adjacent `decision-log.md` (for example, `projects/A250366S013-FIMBox/`). The accounting code remains canonical identity; confirm the human-readable shortname rather than infer it from the slug. Follow the publication guide's single-segment validation, reversible code-encoding record, and collision/duplicate checks. An explicitly requested path-only rename preserves charter/log bytes and Git history, updates navigation, and does not create a new project or revise commitments. Approved content lives on `main`, in-progress candidates on `develop`. Promote only the signed-off candidate, never unrelated drafts by merging all of `develop`. Initialize an empty log without inventing decisions; preserve existing entries, appending corrections through employee-reviewed decision PRs. Employees may self-merge decision PRs, but that does not substitute for charter sign-off. Link every related project/activity repository to the approved `blob/main` charter without copying restricted content.
 
 The bundled [repository policy](cuahsi-project-management/assets/repository-policy-template.md) records owners, access/branch configuration, evidence, and per-repository links; the [decision PR template](cuahsi-project-management/assets/decision-pr-template.md) includes AI/review metadata and the withheld-items checkbox. A plan or open PR is not verified publication. Run [synthetic publication scenarios](cuahsi-project-management/assets/publication-scenarios.md) separately from live checks; reusable assets alone do not establish operational acceptance.
 
