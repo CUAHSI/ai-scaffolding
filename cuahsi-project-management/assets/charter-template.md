@@ -1,12 +1,10 @@
 # Project Charter: <project or activity title>
 
-AI-drafted: yes
+Date last modified: <YYYY-MM-DD>
 
-Reviewed by: pending human review
+## Project summary
 
-Version: <draft identifier>
-
-Status: Draft
+<One short paragraph for a non-specialist: what problem the project addresses, what the team will do, and who benefits. Explain necessary terms and acronyms.>
 
 ## Identity
 
@@ -62,15 +60,3 @@ Status: Draft
 | Document | Link or supplied reference | Use and limitations |
 | --- | --- | --- |
 | <proposal, plan, budget, or authorized session record> | <reference / unavailable> | <what it supports; budgets and HR are linked, not copied> |
-
-## Sign-off
-
-- Approver: <named PI, or owning co-PI for a Core Award Activity / pending>
-- Approval: pending
-- Approval evidence: <explicit statement, source, and approved version / pending>
-- Approval date: <confirmed date / pending>
-- Kickoff/checkpoint: <at award, quarterly re-plan, major pivot, or reporting deadline>
-- Participation: <deliverable staff attending; absentees, if any>
-- Transcript: <on by default; actual recording state or exception / pending>
-- Absentee plan delivery and 20-minute reopening window: <delivery evidence and window with timezone; pending, or not applicable because nobody was absent>
-- Unresolved questions or sign-off blockers: <list / none confirmed>
